@@ -1,7 +1,7 @@
 import { Eyebrow, SectionHead, SiteBtn } from "./ui";
 
 const STATS = [
-  { num: "+1.200", label: "vídeos gerados" },
+  { num: "4 passos", label: "simples, sem edição manual" },
   { num: "9 dias", label: "grátis, sem risco" },
   { num: "3 min", label: "do tema ao vídeo pronto" },
 ];

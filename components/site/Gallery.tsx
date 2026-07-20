@@ -2,10 +2,10 @@ import Image from "next/image";
 import { Eyebrow, SectionHead } from "./ui";
 
 const PHOTOS = [
-  { src: "/images/gallery-1.jpg", span: true },
-  { src: "/images/gallery-2.jpg", span: false },
-  { src: "/images/gallery-3.jpg", span: false },
-  { src: "/images/gallery-4.jpg", span: true },
+  { src: "/images/gallery-1.jpg", alt: "Criadora sorrindo enquanto grava conteúdo com o celular", span: true },
+  { src: "/images/gallery-2.jpg", alt: "Cachorro de estimação, parte do dia a dia de quem cria conteúdo", span: false },
+  { src: "/images/gallery-3.jpg", alt: "Mesa de trabalho com celular em tripé gravando, caderno e café", span: false },
+  { src: "/images/gallery-4.jpg", alt: "Mão segurando o celular pronto pra gravar, em um ambiente aconchegante", span: true },
 ];
 
 export function Gallery() {
@@ -31,7 +31,7 @@ export function Gallery() {
                 p.span ? "col-span-2 max-[720px]:col-span-2" : ""
               }`}
             >
-              <Image src={p.src} alt="" fill className="object-cover" sizes="(max-width: 720px) 50vw, 25vw" priority={i === 0} />
+              <Image src={p.src} alt={p.alt} fill className="object-cover" sizes="(max-width: 720px) 50vw, 25vw" priority={i === 0} />
             </div>
           ))}
         </div>

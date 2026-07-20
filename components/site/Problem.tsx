@@ -3,9 +3,24 @@ import { Icon } from "@/lib/icons";
 import { Eyebrow, SectionHead, SiteBtn } from "./ui";
 
 const CARDS = [
-  { icon: "clock", img: "/images/pain-tempo.jpg", quote: '"Não tenho tempo pra gravar 3 vídeos por dia."' },
-  { icon: "help", img: "/images/pain-ideia.jpg", quote: '"Fico sem ideia de tema depois da primeira semana."' },
-  { icon: "trending-up", img: "/images/pain-alcance.jpg", quote: '"Quando falho um dia, o alcance despenca."' },
+  {
+    icon: "clock",
+    img: "/images/pain-tempo.jpg",
+    alt: "Pessoa mexendo no celular no meio da correria do dia a dia",
+    quote: '"Não tenho tempo pra gravar 3 vídeos por dia."',
+  },
+  {
+    icon: "help",
+    img: "/images/pain-ideia.jpg",
+    alt: "Pessoa pensativa olhando o celular, sem ideia do que postar",
+    quote: '"Fico sem ideia de tema depois da primeira semana."',
+  },
+  {
+    icon: "trending-up",
+    img: "/images/pain-alcance.jpg",
+    alt: "Celular mostrando um painel de métricas de alcance",
+    quote: '"Quando falho um dia, o alcance despenca."',
+  },
 ];
 
 export function Problem() {
@@ -33,7 +48,7 @@ export function Problem() {
                   WebkitMaskImage: "linear-gradient(to left, black 0%, black 30%, transparent 85%)",
                 }}
               >
-                <Image src={c.img} alt="" fill className="object-cover" />
+                <Image src={c.img} alt={c.alt} fill className="object-cover" />
                 <div className="absolute inset-0 bg-[var(--bg-2)] opacity-35" />
               </div>
               <Icon name={c.icon} className="relative z-[1] text-[26px] text-[var(--gold)] mb-4 block" />

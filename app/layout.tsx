@@ -20,9 +20,35 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ["400", "500"],
 });
 
+const title = "POSTime — Poste todo dia, sem gravar todo dia";
+const description =
+  "Transforme qualquer PDF, tema ou vídeo em roteiros, narração e vídeos prontos pro TikTok — em minutos, com a sua própria voz.";
+const siteUrl = "https://postime-app.vercel.app";
+
 export const metadata: Metadata = {
-  title: "POSTime",
-  description: "Transforme qualquer material em roteiros diários, narrados com sua própria voz, prontos para publicar.",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: title,
+    template: "%s · POSTime",
+  },
+  description,
+  keywords: ["gerador de vídeo para TikTok", "IA para TikTok", "roteiro automático", "narração com IA", "conteúdo diário"],
+  openGraph: {
+    title,
+    description,
+    url: siteUrl,
+    siteName: "POSTime",
+    locale: "pt_BR",
+    type: "website",
+    images: [{ url: "/images/hero.jpg", width: 1200, height: 675, alt: "POSTime — motor de conteúdo com IA para TikTok" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+    images: ["/images/hero.jpg"],
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({
