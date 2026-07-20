@@ -31,8 +31,13 @@ export function Solution() {
               Experimentar Agora
             </SiteBtn>
           </div>
-          <div className="self-end relative rounded-t-[22px] overflow-hidden aspect-[4/5] bg-gradient-to-br from-[var(--bg-1)] to-[var(--bg-2)] border border-b-0 border-[var(--line)] shadow-[0_30px_60px_rgba(0,0,0,0.35)]">
-            <Image src="/images/solution.jpg" alt="Pessoa gravando conteúdo com o celular" fill className="object-cover" />
+          <div className="self-end relative rounded-[22px] overflow-hidden aspect-[4/5] bg-gradient-to-br from-[var(--bg-1)] to-[var(--bg-2)] border border-[var(--line)] shadow-[0_30px_60px_rgba(0,0,0,0.35)]">
+            <Image
+              src="/images/solution.jpg"
+              alt="Pessoa gravando conteúdo com o celular"
+              fill
+              className="object-cover scale-[1.3] origin-[20%_15%]"
+            />
           </div>
         </div>
       </div>
