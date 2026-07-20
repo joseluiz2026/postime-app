@@ -29,9 +29,9 @@ export function AmbientBackground() {
   }, []);
 
   return (
-    <div className="fixed inset-x-0 -top-[60px] -bottom-[60px] -z-10 opacity-25 pointer-events-none overflow-hidden">
+    <div className="fixed inset-x-0 -top-[60px] -bottom-[60px] -z-10 opacity-35 pointer-events-none overflow-hidden">
       <div ref={ref} className="absolute inset-0">
-        <Image src="/images/bg-ambient.jpg" alt="" fill priority className="object-cover" />
+        <Image src="/images/bg-ambient.jpg" alt="" fill priority className="object-cover object-[50%_8%]" />
       </div>
     </div>
   );
