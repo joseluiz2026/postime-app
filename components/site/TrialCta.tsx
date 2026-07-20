@@ -6,7 +6,12 @@ export function TrialCta() {
     <section className="py-24 max-[720px]:py-14">
       <div className="max-w-[1120px] mx-auto px-8">
         <div className="relative overflow-hidden rounded-[22px] border-[0.5px] border-[var(--line-strong)]">
-          <Image src="/images/trial-card.jpg" alt="Criador sorrindo enquanto grava um vídeo com o celular" fill className="object-cover" />
+          <Image
+            src="/images/trial-card.jpg"
+            alt="Criador sorrindo enquanto grava um vídeo com o celular"
+            fill
+            className="object-cover scale-[1.3] origin-[75%_10%]"
+          />
           <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(11,18,32,0.95)_0%,rgba(11,18,32,0.8)_55%,rgba(11,18,32,0.45)_100%)]" />
           <div className="relative z-[1] px-10 py-16 max-w-[560px] max-[640px]:px-6 max-[640px]:py-10">
             <Eyebrow>A oferta</Eyebrow>
