@@ -32,7 +32,7 @@ export function Faq() {
           <h2 className="font-[var(--font-display)] font-extrabold text-[36px] leading-tight m-0">Perguntas frequentes</h2>
         </SectionHead>
 
-        <div className="max-w-[720px] flex flex-col">
+        <div className="flex flex-col">
           {ITEMS.map((item) => (
             <details key={item.q} className="border-b-[0.5px] border-[var(--line)] py-5 group">
               <summary className="cursor-pointer text-base font-medium text-[var(--text-1)] list-none marker:hidden flex justify-between items-center gap-4">
