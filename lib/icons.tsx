@@ -24,6 +24,7 @@ const ICON_PATHS: Record<string, string> = {
   link: '<path d="M9 15l6-6"/><path d="M11 6l1-1a3.5 3.5 0 0 1 5 5l-1 1"/><path d="M13 18l-1 1a3.5 3.5 0 0 1-5-5l1-1"/>',
   "loader-2": '<path d="M12 3a9 9 0 1 0 9 9"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11v-4a4 4 0 0 1 8 0v4"/>',
+  logout: '<path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2"/><path d="M7 12h14"/><path d="M18 15l3 -3l-3 -3"/>',
   microphone: '<path d="M9 4a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>',
   "microphone-2": '<path d="M9 4a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>',
   minus: '<path d="M5 12h14"/>',

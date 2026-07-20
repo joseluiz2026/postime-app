@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -10,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { getFreeLimit, type Plan } from "./plan";
+import { createClient } from "./supabase/client";
 
 export type SourceType = "ebook" | "texto" | "link" | "youtube" | "websearch";
 export type StyleName =
@@ -121,8 +123,10 @@ type WizardState = {
 };
 
 type WizardContextValue = WizardState & {
+  userEmail: string;
   setAccountName: (name: string) => void;
   accountInitials: () => string;
+  signOut: () => void;
 
   setSourceType: (t: SourceType) => void;
   setEbookFileName: (name: string | null) => void;
@@ -170,8 +174,17 @@ type WizardContextValue = WizardState & {
 
 const WizardContext = createContext<WizardContextValue | null>(null);
 
-export function WizardProvider({ children }: { children: ReactNode }) {
-  const [accountName, setAccountName] = useState("José Luiz Cruz");
+export function WizardProvider({
+  children,
+  initialName,
+  userEmail,
+}: {
+  children: ReactNode;
+  initialName: string;
+  userEmail: string;
+}) {
+  const router = useRouter();
+  const [accountName, setAccountNameState] = useState(initialName);
   const [plan, setPlanState] = useState<Plan>("free");
   const [freeDay, setFreeDay] = useState(1);
   const [dailyGenerated, setDailyGenerated] = useState(0);
@@ -434,6 +447,19 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }, [accountName]);
 
+  const setAccountName = useCallback((name: string) => {
+    setAccountNameState(name);
+    const supabase = createClient();
+    supabase.auth.updateUser({ data: { full_name: name } });
+  }, []);
+
+  const signOut = useCallback(async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/");
+    router.refresh();
+  }, [router]);
+
   const value = useMemo<WizardContextValue>(
     () => ({
       accountName,
@@ -462,8 +488,10 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       videos,
       videoCountStatus,
       modal,
+      userEmail,
       setAccountName,
       accountInitials,
+      signOut,
       setSourceType,
       setEbookFileName,
       setTexto,
@@ -525,7 +553,10 @@ export function WizardProvider({ children }: { children: ReactNode }) {
       videos,
       videoCountStatus,
       modal,
+      userEmail,
+      setAccountName,
       accountInitials,
+      signOut,
       addOwnImages,
       removeOwnImage,
       sourceLabel,

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Icon } from "@/lib/icons";
 import { useWizard } from "@/lib/wizard-context";
+import { createClient } from "@/lib/supabase/client";
 import { Btn, FieldLabel, ModalShell, TextArea, TextInput } from "../ui";
 
 const TITLES: Record<string, { icon: string; title: string }> = {
@@ -36,6 +37,31 @@ function PasswordForm() {
   const [pw2, setPw2] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSuccess(false);
+    if (pw.length < 8) {
+      setError("A senha precisa ter pelo menos 8 caracteres.");
+      return;
+    }
+    if (pw !== pw2) {
+      setError("As senhas não coincidem.");
+      return;
+    }
+    setError("");
+    setSaving(true);
+    const supabase = createClient();
+    const { error: updateError } = await supabase.auth.updateUser({ password: pw });
+    setSaving(false);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setPw("");
+    setPw2("");
+    setSuccess(true);
+  }
 
   return (
     <div>
@@ -52,22 +78,7 @@ function PasswordForm() {
       )}
       {success && <p className="text-[12.5px] text-[var(--teal)] mt-3">Senha atualizada com sucesso.</p>}
       <div className="mt-4">
-        <Btn
-          variant="primary"
-          onClick={() => {
-            setSuccess(false);
-            if (pw.length < 8) {
-              setError("A senha precisa ter pelo menos 8 caracteres.");
-              return;
-            }
-            if (pw !== pw2) {
-              setError("As senhas não coincidem.");
-              return;
-            }
-            setError("");
-            setSuccess(true);
-          }}
-        >
+        <Btn variant="primary" disabled={saving} onClick={save}>
           <Icon name="check" /> Salvar nova senha
         </Btn>
       </div>

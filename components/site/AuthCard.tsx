@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Icon } from "@/lib/icons";
+
+export type AuthResult = { error?: string; info?: string } | void;
 
 export function AuthCard({
   title,
@@ -11,18 +12,28 @@ export function AuthCard({
   submitLabel,
   footer,
   children,
+  onSubmit,
 }: {
   title: string;
   subtitle: string;
   submitLabel: string;
   footer: ReactNode;
   children: ReactNode;
+  onSubmit: (formData: FormData) => Promise<AuthResult>;
 }) {
-  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    router.push("/app/fonte");
+    setLoading(true);
+    setError(null);
+    setInfo(null);
+    const result = await onSubmit(new FormData(e.currentTarget));
+    setLoading(false);
+    if (result?.error) setError(result.error);
+    if (result?.info) setInfo(result.info);
   }
 
   return (
@@ -33,11 +44,21 @@ export function AuthCard({
 
         <form onSubmit={handleSubmit} className="mt-7 flex flex-col gap-4">
           {children}
+
+          {error && (
+            <p className="text-[13px] text-[var(--gold)] leading-relaxed">
+              <Icon name="alert-triangle" /> {error}
+            </p>
+          )}
+          {info && <p className="text-[13px] text-[var(--teal)] leading-relaxed">{info}</p>}
+
           <button
             type="submit"
-            className="font-sans font-semibold text-[15px] px-7 py-[15px] rounded-xl bg-gradient-to-br from-[var(--gold)] to-[var(--teal)] text-[#0B1220] shadow-[0_8px_24px_rgba(56,189,248,0.25)] inline-flex items-center justify-center gap-2 transition-all hover:-translate-y-px mt-2 cursor-pointer"
+            disabled={loading}
+            className="font-sans font-semibold text-[15px] px-7 py-[15px] rounded-xl bg-gradient-to-br from-[var(--gold)] to-[var(--teal)] text-[#0B1220] shadow-[0_8px_24px_rgba(56,189,248,0.25)] inline-flex items-center justify-center gap-2 transition-all hover:-translate-y-px mt-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
-            {submitLabel} <Icon name="arrow-right" />
+            {loading ? <Icon name="loader-2" spin /> : <Icon name="arrow-right" />}
+            {loading ? "Só um instante..." : submitLabel}
           </button>
         </form>
 

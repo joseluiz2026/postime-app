@@ -57,6 +57,11 @@ export function AccountCard() {
           </div>
         </div>
       </div>
+      {wizard.userEmail && (
+        <div className="text-[11px] text-[var(--text-3)] mb-3 truncate" title={wizard.userEmail}>
+          {wizard.userEmail}
+        </div>
+      )}
       <div className="flex flex-col gap-0.5">
         {[
           { icon: "lock", label: "Trocar senha", type: "password" as const },
@@ -73,6 +78,13 @@ export function AccountCard() {
             <Icon name={item.icon} className="text-sm shrink-0" /> {item.label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => wizard.signOut()}
+          className="flex items-center gap-2 bg-transparent border-none text-[var(--text-2)] text-xs font-sans px-1.5 py-2 rounded-lg cursor-pointer text-left w-full transition-all hover:bg-[var(--bg-2)] hover:text-[var(--gold)] mt-1 pt-2 border-t-[0.5px] border-[var(--line)]"
+        >
+          <Icon name="logout" className="text-sm shrink-0" /> Sair
+        </button>
       </div>
     </div>
   );

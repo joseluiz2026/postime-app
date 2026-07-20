@@ -1,14 +1,25 @@
+import { redirect } from "next/navigation";
 import { AccountCard } from "@/components/app/AccountCard";
 import { WizardModals } from "@/components/app/modals";
 import { Stepper } from "@/components/app/Stepper";
 import { ThemeSwitcher } from "@/components/app/ThemeSwitcher";
 import { ThemeProvider } from "@/lib/theme-context";
+import { createClient } from "@/lib/supabase/server";
 import { WizardProvider } from "@/lib/wizard-context";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const initialName = (user.user_metadata?.full_name as string | undefined)?.trim() || user.email || "Você";
+
   return (
     <ThemeProvider>
-    <WizardProvider>
+    <WizardProvider initialName={initialName} userEmail={user.email ?? ""}>
       <div className="max-w-[880px] mx-auto px-8 pt-10 pb-24">
         <div className="bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] border-b-[2.5px] border-b-[var(--gold)] rounded-[18px] px-8 pt-9 pb-[30px] mb-8">
           <div className="flex justify-between items-start gap-8 flex-wrap">
