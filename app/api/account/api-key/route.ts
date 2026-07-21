@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { generateRoteiros, type LlmProvider } from "@/lib/ai/generate-roteiros";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const VALID_PROVIDERS: LlmProvider[] = ["google", "openai", "anthropic"];
 

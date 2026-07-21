@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { generateRoteiros, type LlmProvider } from "@/lib/ai/generate-roteiros";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const FREE_LIFETIME_LIMIT = 18;
 
@@ -79,6 +80,6 @@ export async function POST(request: Request) {
     if (/api key|unauthorized|401|invalid/i.test(message)) {
       return NextResponse.json({ error: "invalid_key" }, { status: 401 });
     }
-    return NextResponse.json({ error: "generation_failed", debug: message }, { status: 502 });
+    return NextResponse.json({ error: "generation_failed" }, { status: 502 });
   }
 }
