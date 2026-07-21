@@ -1,15 +1,17 @@
 import { generateText, Output } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createGroq } from "@ai-sdk/groq";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
 
-export type LlmProvider = "google" | "openai" | "anthropic";
+export type LlmProvider = "google" | "openai" | "anthropic" | "groq";
 
 export const PROVIDER_LABELS: Record<LlmProvider, string> = {
   google: "Google Gemini",
   openai: "OpenAI",
   anthropic: "Anthropic",
+  groq: "Groq",
 };
 
 const roteiroItemSchema = z.object({
@@ -25,6 +27,9 @@ function resolveModel(provider: LlmProvider, apiKey: string) {
       return createOpenAI({ apiKey })("gpt-4.1-mini");
     case "anthropic":
       return createAnthropic({ apiKey })("claude-haiku-4-5");
+    case "groq":
+      // Structured output (json_schema) is currently only supported by the gpt-oss models on Groq.
+      return createGroq({ apiKey })("openai/gpt-oss-120b");
   }
 }
 

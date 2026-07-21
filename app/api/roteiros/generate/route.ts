@@ -56,13 +56,13 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "server_not_configured" }, { status: 500 });
     }
 
     const roteiros = await generateRoteiros({
-      provider: "google",
+      provider: "groq",
       apiKey,
       qty,
       duration,

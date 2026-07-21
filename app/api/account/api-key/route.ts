@@ -6,7 +6,7 @@ import { generateRoteiros, type LlmProvider } from "@/lib/ai/generate-roteiros";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const VALID_PROVIDERS: LlmProvider[] = ["google", "openai", "anthropic"];
+const VALID_PROVIDERS: LlmProvider[] = ["google", "openai", "anthropic", "groq"];
 
 export async function POST(request: Request) {
   const supabase = await createClient();

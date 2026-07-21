@@ -164,7 +164,7 @@ export default function EstiloPage() {
           }}
         >
           <Icon name={wizard.buildingVideos ? "loader-2" : "arrow-right"} spin={wizard.buildingVideos} />{" "}
-          {wizard.buildingVideos ? "Buscando imagens..." : "Confirmar e montar vídeo"}
+          {wizard.buildingVideos ? "Montando vídeo..." : "Confirmar e montar vídeo"}
         </Btn>
       </div>
     </Card>

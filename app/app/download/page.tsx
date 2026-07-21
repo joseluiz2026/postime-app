@@ -4,6 +4,13 @@ import { Icon } from "@/lib/icons";
 import { useWizard } from "@/lib/wizard-context";
 import { Btn, Card, HelpTip } from "@/components/app/ui";
 
+function formatDuration(seconds?: number): string {
+  if (!seconds) return "--:--";
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 export default function DownloadPage() {
   const wizard = useWizard();
 
@@ -28,18 +35,33 @@ export default function DownloadPage() {
               >
                 {!video.imageUrl && <Icon name="player-play" />}
                 <span className="absolute bottom-2 right-2 font-mono text-[10px] bg-black/55 px-1.5 py-1 rounded-md text-[var(--text-1)]">
-                  0:30
+                  {formatDuration(video.durationSeconds)}
                 </span>
               </div>
               <div className="p-3">
                 <div className="text-[12.5px] font-medium text-[var(--text-1)] mb-3">{video.title}</div>
                 <div className="flex flex-wrap gap-1.5">
-                  <button className="flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_14%,transparent)] border-[color-mix(in_srgb,var(--gold)_30%,transparent)] text-[var(--gold)] cursor-pointer transition-all hover:bg-[color-mix(in_srgb,var(--gold)_22%,transparent)]">
+                  <a
+                    href={video.videoUrl ?? undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-disabled={!video.videoUrl}
+                    className={`flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_14%,transparent)] border-[color-mix(in_srgb,var(--gold)_30%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_22%,transparent)] ${
+                      video.videoUrl ? "cursor-pointer" : "opacity-40 pointer-events-none"
+                    }`}
+                  >
                     Ver
-                  </button>
-                  <button className="flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_32%,transparent)] border-[color-mix(in_srgb,var(--gold)_55%,transparent)] text-[var(--gold)] cursor-pointer transition-all hover:bg-[color-mix(in_srgb,var(--gold)_42%,transparent)]">
+                  </a>
+                  <a
+                    href={video.videoUrl ?? undefined}
+                    download={video.videoUrl ? `${video.title}.mp4` : undefined}
+                    aria-disabled={!video.videoUrl}
+                    className={`flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_32%,transparent)] border-[color-mix(in_srgb,var(--gold)_55%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_42%,transparent)] ${
+                      video.videoUrl ? "cursor-pointer" : "opacity-40 pointer-events-none"
+                    }`}
+                  >
                     Baixar
-                  </button>
+                  </a>
                   <button
                     onClick={() => wizard.publishVideo(idx)}
                     disabled={video.publishing}

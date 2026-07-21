@@ -34,6 +34,9 @@ export type Video = {
   published?: boolean;
   imageUrl?: string;
   imageCredit?: string;
+  videoUrl?: string;
+  expiresAt?: string;
+  durationSeconds?: number;
 };
 
 export type ModalId =
@@ -518,12 +521,36 @@ export function WizardProvider({
         return false;
       }
       const images: ({ url: string; photographer: string } | null)[] = data.images;
-      const built: Video[] = indices.map((i, pos) => ({
-        title: `Tema ${String(i + 1).padStart(2, "0")} · ${selectedStyle}`,
-        style: selectedStyle,
-        imageUrl: images[pos]?.url,
-        imageCredit: images[pos]?.photographer,
-      }));
+      const built: Video[] = await Promise.all(
+        indices.map(async (i, pos): Promise<Video> => {
+          const image = images[pos];
+          const base: Video = {
+            title: `Tema ${String(i + 1).padStart(2, "0")} · ${selectedStyle}`,
+            style: selectedStyle,
+            imageUrl: image?.url,
+            imageCredit: image?.photographer,
+          };
+          const audioPath = audioPaths[i];
+          if (!image?.url || !audioPath) return base;
+          try {
+            const renderRes = await fetch("/api/jobs/render", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ audioPath, imageUrl: image.url }),
+            });
+            const renderData = await renderRes.json();
+            if (!renderRes.ok) return base;
+            return {
+              ...base,
+              videoUrl: renderData.videoUrl,
+              expiresAt: renderData.expiresAt,
+              durationSeconds: renderData.durationSeconds,
+            };
+          } catch {
+            return base;
+          }
+        }),
+      );
       const label = sourceLabel() ?? "fonte selecionada";
       applyVideos(built, `${indices.length} vídeos gerados hoje · estilo ${selectedStyle} · fonte: ${label}`);
       setUsedTemas((prev) => prev.map((v, i) => (indices.includes(i) ? true : v)));
@@ -535,7 +562,7 @@ export function WizardProvider({
     } finally {
       setBuildingVideos(false);
     }
-  }, [selectedForVideo, selectedStyle, sourceLabel, applyVideos, roteiros]);
+  }, [selectedForVideo, selectedStyle, sourceLabel, applyVideos, roteiros, audioPaths]);
 
   const clickAutoGenerate = useCallback(() => {
     if (!hasOwnKey && lifetimeGenerated >= FREE_LIFETIME_LIMIT) {

@@ -179,8 +179,8 @@ function ApiKeyForm() {
     <div>
       <p className="text-[13.5px] text-[var(--text-2)] leading-relaxed mb-3">
         Sem chave própria, você tem gerações grátis limitadas usando a chave do POSTime. Conecte sua própria chave
-        de API (OpenAI, Google Gemini ou Anthropic) para gerar roteiros sem limite — o custo passa a ser seu, com o
-        provedor escolhido.
+        de API (OpenAI, Google Gemini, Anthropic ou Groq) para gerar roteiros sem limite — o custo passa a ser seu,
+        com o provedor escolhido.
       </p>
       <FieldLabel htmlFor="apiProvider">Provedor</FieldLabel>
       <select
@@ -192,6 +192,7 @@ function ApiKeyForm() {
         <option value="google">Google Gemini</option>
         <option value="openai">OpenAI</option>
         <option value="anthropic">Anthropic</option>
+        <option value="groq">Groq</option>
       </select>
       <div className="mt-3">
         <FieldLabel htmlFor="apiKeyInput">Chave de API</FieldLabel>
