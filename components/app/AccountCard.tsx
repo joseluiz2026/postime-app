@@ -64,6 +64,7 @@ export function AccountCard() {
       )}
       <div className="flex flex-col gap-0.5">
         {[
+          { icon: "key", label: "Minha chave de API", type: "apikey" as const },
           { icon: "lock", label: "Trocar senha", type: "password" as const },
           { icon: "alert-triangle", label: "Relatar problema", type: "report" as const },
           { icon: "help", label: "FAQ", type: "faq" as const },

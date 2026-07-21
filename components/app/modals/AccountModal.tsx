@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Icon } from "@/lib/icons";
+import { PROVIDER_LABELS, type LlmProvider } from "@/lib/ai/generate-roteiros";
 import { useWizard } from "@/lib/wizard-context";
 import { createClient } from "@/lib/supabase/client";
 import { Btn, FieldLabel, ModalShell, TextArea, TextInput } from "../ui";
@@ -11,12 +12,13 @@ const TITLES: Record<string, { icon: string; title: string }> = {
   report: { icon: "alert-triangle", title: "Relatar problema" },
   faq: { icon: "help", title: "Perguntas frequentes" },
   support: { icon: "message-bot", title: "Suporte por IA" },
+  apikey: { icon: "key", title: "Minha chave de API" },
 };
 
 const FAQ_ITEMS = [
   {
     q: "Quantos vídeos posso gerar no plano Free?",
-    a: "3 por dia nos primeiros 3 dias, depois 2/dia, depois 1/dia, e bloqueia após 9 dias — faça upgrade pro Pro pra gerar sem limite.",
+    a: "18 gerações no total (não é por dia). Depois disso, conecte sua própria chave de API em \"Minha chave de API\" para continuar gerando sem limite.",
   },
   {
     q: "Preciso pagar pela ElevenLabs pra clonar minha voz?",
@@ -137,6 +139,88 @@ function SupportBody() {
   );
 }
 
+function ApiKeyForm() {
+  const wizard = useWizard();
+  const [provider, setProvider] = useState<LlmProvider>("google");
+  const [apiKey, setApiKey] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  async function save() {
+    setSuccess(false);
+    if (!apiKey.trim()) return;
+    const ok = await wizard.saveOwnKey(provider, apiKey.trim());
+    if (ok) {
+      setApiKey("");
+      setSuccess(true);
+    }
+  }
+
+  async function remove() {
+    await wizard.removeOwnKey();
+    setSuccess(false);
+  }
+
+  if (wizard.hasOwnKey) {
+    return (
+      <div>
+        <p className="text-[13.5px] text-[var(--text-2)] leading-relaxed mb-3">
+          <Icon name="circle-check" className="text-[var(--teal)]" /> Chave conectada:{" "}
+          <strong className="text-[var(--text-1)]">{PROVIDER_LABELS[wizard.ownKeyProvider!]}</strong>. Suas gerações
+          de roteiro estão sem limite, usando essa chave.
+        </p>
+        <Btn disabled={wizard.savingKey} onClick={remove}>
+          <Icon name="alert-triangle" /> Remover chave
+        </Btn>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-[13.5px] text-[var(--text-2)] leading-relaxed mb-3">
+        Sem chave própria, você tem gerações grátis limitadas usando a chave do POSTime. Conecte sua própria chave
+        de API (OpenAI, Google Gemini ou Anthropic) para gerar roteiros sem limite — o custo passa a ser seu, com o
+        provedor escolhido.
+      </p>
+      <FieldLabel htmlFor="apiProvider">Provedor</FieldLabel>
+      <select
+        id="apiProvider"
+        value={provider}
+        onChange={(e) => setProvider(e.target.value as LlmProvider)}
+        className="w-full bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] rounded-[9px] text-[var(--text-1)] font-sans text-sm px-[14px] py-[11px] outline-none transition-all hover:border-[var(--line-strong)] focus:border-[var(--gold)] focus:bg-[var(--bg-3)]"
+      >
+        <option value="google">Google Gemini</option>
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option>
+      </select>
+      <div className="mt-3">
+        <FieldLabel htmlFor="apiKeyInput">Chave de API</FieldLabel>
+        <TextInput
+          id="apiKeyInput"
+          type="password"
+          placeholder="Cole sua chave aqui"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+        />
+      </div>
+      {wizard.keyError && (
+        <p className="text-[12.5px] text-[var(--gold)] mt-3">
+          <Icon name="alert-triangle" /> {wizard.keyError}
+        </p>
+      )}
+      {success && <p className="text-[12.5px] text-[var(--teal)] mt-3">Chave conectada com sucesso.</p>}
+      <p className="text-xs text-[var(--text-3)] leading-relaxed mt-3">
+        Sua chave é armazenada de forma criptografada e nunca é reexibida.
+      </p>
+      <div className="mt-4">
+        <Btn variant="primary" disabled={wizard.savingKey || !apiKey.trim()} onClick={save}>
+          <Icon name="key" /> {wizard.savingKey ? "Validando..." : "Salvar chave"}
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
 export function AccountModal() {
   const wizard = useWizard();
   const open = wizard.modal.type === "account";
@@ -149,6 +233,7 @@ export function AccountModal() {
       {accountType === "report" && <ReportForm />}
       {accountType === "faq" && <FaqBody />}
       {accountType === "support" && <SupportBody />}
+      {accountType === "apikey" && <ApiKeyForm />}
     </ModalShell>
   );
 }

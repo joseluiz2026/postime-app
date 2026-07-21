@@ -5,12 +5,14 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
-import { getFreeLimit, type Plan } from "./plan";
+import type { LlmProvider } from "./ai/generate-roteiros";
+import { FREE_LIFETIME_LIMIT, type Plan } from "./plan";
 import { createClient } from "./supabase/client";
 
 export type SourceType = "ebook" | "texto" | "link" | "youtube" | "websearch";
@@ -40,7 +42,7 @@ export type ModalId =
   | "tiktok"
   | "autoProgress";
 
-export type AccountModalType = "password" | "report" | "faq" | "support";
+export type AccountModalType = "password" | "report" | "faq" | "support" | "apikey";
 
 type ModalState =
   | { type: null }
@@ -49,27 +51,7 @@ type ModalState =
   | { type: "account"; accountType: AccountModalType }
   | { type: "whatsapp" }
   | { type: "tiktok" }
-  | { type: "autoProgress"; onDone: () => void };
-
-const RT_TEXT_TEMPLATES = [
-  "Roteiro gerado automaticamente a partir do tema principal identificado no material enviado.",
-  "Tema identificado, com gancho reformulado para reter atenção nos primeiros três segundos.",
-  "Roteiro com fechamento em pergunta para estimular comentários e compartilhamento.",
-  "Recorte direto da fonte, adaptado para ritmo rápido e linguagem de rede social.",
-  "Ideia central reescrita em formato de lista, fácil de acompanhar em vídeo curto.",
-  "Abertura de impacto seguida de exemplo prático extraído do material original.",
-  "Comparação antes/depois construída a partir de um trecho da fonte selecionada.",
-  "Roteiro com chamada direta para seguir o perfil ao final do vídeo.",
-  "Mini-tutorial baseado em um passo específico identificado na fonte.",
-  "Roteiro de bastidor, com tom mais pessoal, extraído do contexto da fonte.",
-];
-
-function makeRoteiros(n: number): Roteiro[] {
-  return Array.from({ length: n }, (_, i) => ({
-    meta: `TEMA ${String(i + 1).padStart(2, "0")} · EXTRAÍDO DA FONTE`,
-    text: RT_TEXT_TEMPLATES[i % RT_TEXT_TEMPLATES.length],
-  }));
-}
+  | { type: "autoProgress"; onDone: () => void | Promise<void> };
 
 function normalizeForMatch(str: string): string {
   return str
@@ -85,12 +67,20 @@ type WizardState = {
   // account
   accountName: string;
   plan: Plan;
-  freeDay: number;
-  dailyGenerated: number;
   voiceCloned: boolean;
   selectedVoiceName: string;
   tiktokConnected: boolean;
   tiktokHandle: string;
+
+  // AI usage / own key
+  lifetimeGenerated: number;
+  hasOwnKey: boolean;
+  ownKeyProvider: LlmProvider | null;
+  savingKey: boolean;
+  keyError: string | null;
+  generating: boolean;
+  generateError: string | null;
+  regeneratingIndex: number | null;
 
   // source
   sourceType: SourceType;
@@ -146,12 +136,14 @@ type WizardContextValue = WizardState & {
   setPlan: (p: Plan) => void;
   requestPro: () => void;
   confirmUpgrade: () => void;
-  bumpFreeDay: (delta: number) => void;
-  freeLimit: () => number;
+
+  refreshUsage: () => Promise<void>;
+  saveOwnKey: (provider: LlmProvider, apiKey: string) => Promise<boolean>;
+  removeOwnKey: () => Promise<void>;
 
   editRoteiroText: (idx: number, text: string) => void;
-  regenerateRoteiro: (idx: number) => void;
-  clickGerar: () => void;
+  regenerateRoteiro: (idx: number) => Promise<void>;
+  clickGerar: () => Promise<void>;
 
   setScriptIndex: (i: number) => void;
   saveCurrentRecording: () => void;
@@ -186,12 +178,19 @@ export function WizardProvider({
   const router = useRouter();
   const [accountName, setAccountNameState] = useState(initialName);
   const [plan, setPlanState] = useState<Plan>("free");
-  const [freeDay, setFreeDay] = useState(1);
-  const [dailyGenerated, setDailyGenerated] = useState(0);
   const [voiceCloned, setVoiceCloned] = useState(false);
   const [selectedVoiceName, setSelectedVoiceName] = useState("");
   const [tiktokConnected, setTiktokConnected] = useState(false);
   const [tiktokHandle, setTiktokHandle] = useState("@seu.usuario");
+
+  const [lifetimeGenerated, setLifetimeGenerated] = useState(0);
+  const [hasOwnKey, setHasOwnKey] = useState(false);
+  const [ownKeyProvider, setOwnKeyProvider] = useState<LlmProvider | null>(null);
+  const [savingKey, setSavingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
 
   const [sourceType, setSourceType] = useState<SourceType>("ebook");
   const [ebookFileName, setEbookFileName] = useState<string | null>(null);
@@ -203,11 +202,11 @@ export function WizardProvider({
 
   const [duration, setDuration] = useState<Duration>("15s");
   const [qty, setQtyState] = useState(3);
-  const [roteiros, setRoteiros] = useState<Roteiro[]>(makeRoteiros(3));
+  const [roteiros, setRoteiros] = useState<Roteiro[]>([]);
 
   const [scriptIndex, setScriptIndex] = useState(0);
-  const [savedTemas, setSavedTemas] = useState<boolean[]>(new Array(3).fill(false));
-  const [usedTemas, setUsedTemas] = useState<boolean[]>(new Array(3).fill(false));
+  const [savedTemas, setSavedTemas] = useState<boolean[]>([]);
+  const [usedTemas, setUsedTemas] = useState<boolean[]>([]);
   const [selectedForVideo, setSelectedForVideo] = useState<number[]>([]);
 
   const [selectedStyle, setSelectedStyle] = useState<StyleName>("Minimalista");
@@ -219,6 +218,62 @@ export function WizardProvider({
   const [modal, setModal] = useState<ModalState>({ type: null });
   const openModal = useCallback((m: ModalState) => setModal(m), []);
   const closeModal = useCallback(() => setModal({ type: null }), []);
+
+  const refreshUsage = useCallback(async () => {
+    const supabase = createClient();
+    const [profileRes, keyRes] = await Promise.all([
+      supabase.from("profiles").select("lifetime_generations").maybeSingle(),
+      supabase.from("user_api_keys").select("provider, created_at").maybeSingle(),
+    ]);
+    setLifetimeGenerated(profileRes.data?.lifetime_generations ?? 0);
+    setHasOwnKey(!!keyRes.data);
+    setOwnKeyProvider((keyRes.data?.provider as LlmProvider | undefined) ?? null);
+  }, []);
+
+  useEffect(() => {
+    refreshUsage();
+  }, [refreshUsage]);
+
+  const saveOwnKey = useCallback(
+    async (provider: LlmProvider, apiKey: string): Promise<boolean> => {
+      setSavingKey(true);
+      setKeyError(null);
+      try {
+        const res = await fetch("/api/account/api-key", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider, apiKey }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setKeyError(
+            data.error === "invalid_key"
+              ? "Chave inválida ou sem permissão — verifique e tente novamente."
+              : "Não foi possível salvar a chave agora.",
+          );
+          return false;
+        }
+        await refreshUsage();
+        return true;
+      } catch {
+        setKeyError("Falha de conexão. Tente novamente.");
+        return false;
+      } finally {
+        setSavingKey(false);
+      }
+    },
+    [refreshUsage],
+  );
+
+  const removeOwnKey = useCallback(async () => {
+    setSavingKey(true);
+    try {
+      await fetch("/api/account/api-key", { method: "DELETE" });
+      await refreshUsage();
+    } finally {
+      setSavingKey(false);
+    }
+  }, [refreshUsage]);
 
   const sourceLabel = useCallback((): string | null => {
     if (sourceType === "ebook") return ebookFileName;
@@ -256,11 +311,9 @@ export function WizardProvider({
     });
   }, []);
 
-  const freeLimit = useCallback(() => getFreeLimit(freeDay), [freeDay]);
-
   const qtyMax = useCallback(
-    () => (plan === "pro" ? 20 : freeLimit()),
-    [plan, freeLimit],
+    () => (hasOwnKey ? 20 : Math.max(0, FREE_LIFETIME_LIMIT - lifetimeGenerated)),
+    [hasOwnKey, lifetimeGenerated],
   );
 
   const setQty = useCallback(
@@ -292,11 +345,6 @@ export function WizardProvider({
     closeModal();
   }, [closeModal]);
 
-  const bumpFreeDay = useCallback((delta: number) => {
-    setFreeDay((d) => Math.min(30, Math.max(1, d + delta)));
-    setDailyGenerated(0);
-  }, []);
-
   const resetVideoTracking = useCallback((n: number) => {
     setScriptIndex(0);
     setSavedTemas(new Array(n).fill(false));
@@ -304,54 +352,102 @@ export function WizardProvider({
     setSelectedForVideo([]);
   }, []);
 
-  const applyVideos = useCallback((next: Video[], status: string) => {
-    setVideos(next);
-    setVideoCountStatus(status);
-    if (next.length > 0 && !whatsappPromptShown.current) {
-      whatsappPromptShown.current = true;
-      setTimeout(() => openModal({ type: "whatsapp" }), 600);
-    }
-  }, [openModal]);
-
-  const generateRoteirosInternal = useCallback(
-    (n: number) => {
-      setRoteiros(makeRoteiros(n));
-      resetVideoTracking(n);
+  const applyVideos = useCallback(
+    (next: Video[], status: string) => {
+      setVideos(next);
+      setVideoCountStatus(status);
+      if (next.length > 0 && !whatsappPromptShown.current) {
+        whatsappPromptShown.current = true;
+        setTimeout(() => openModal({ type: "whatsapp" }), 600);
+      }
     },
-    [resetVideoTracking],
+    [openModal],
   );
 
   const editRoteiroText = useCallback((idx: number, text: string) => {
     setRoteiros((prev) => prev.map((r, i) => (i === idx ? { ...r, text } : r)));
   }, []);
 
-  const regenerateRoteiro = useCallback((idx: number) => {
-    setRoteiros((prev) =>
-      prev.map((r, i) =>
-        i === idx
-          ? {
-              ...r,
-              text: RT_TEXT_TEMPLATES[(RT_TEXT_TEMPLATES.indexOf(r.text) + 1 + RT_TEXT_TEMPLATES.length) % RT_TEXT_TEMPLATES.length],
-            }
-          : r,
-      ),
-    );
-  }, []);
+  const requestSourceText = useCallback(
+    () => (sourceType === "texto" ? texto : sourceLabel() ?? ""),
+    [sourceType, texto, sourceLabel],
+  );
 
-  const clickGerar = useCallback(() => {
+  const clickGerar = useCallback(async () => {
     const n = qty || 1;
-    const limit = freeLimit();
-    if (plan === "free" && dailyGenerated + n > limit) {
+    if (!hasOwnKey && lifetimeGenerated + n > FREE_LIFETIME_LIMIT) {
       openModal({ type: "upgrade", auto: true });
       return;
     }
-    generateRoteirosInternal(n);
-    if (plan === "free") {
-      const next = dailyGenerated + n;
-      setDailyGenerated(next);
-      if (next >= limit) openModal({ type: "upgrade", auto: true });
+    setGenerating(true);
+    setGenerateError(null);
+    try {
+      const res = await fetch("/api/roteiros/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ qty: n, duration, sourceType, sourceText: requestSourceText() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.error === "limit_reached") {
+          setLifetimeGenerated(FREE_LIFETIME_LIMIT);
+          openModal({ type: "upgrade", auto: true });
+        } else if (data.error === "invalid_key") {
+          setGenerateError("Sua chave de API parece inválida. Verifique em Minha conta.");
+        } else {
+          setGenerateError("Não foi possível gerar agora. Tente novamente.");
+        }
+        return;
+      }
+      setRoteiros(data.roteiros);
+      resetVideoTracking(data.roteiros.length);
+      if (data.mode === "free" && typeof data.remaining === "number") {
+        setLifetimeGenerated(FREE_LIFETIME_LIMIT - data.remaining);
+      }
+    } catch {
+      setGenerateError("Falha de conexão. Tente novamente.");
+    } finally {
+      setGenerating(false);
     }
-  }, [qty, freeLimit, plan, dailyGenerated, generateRoteirosInternal, openModal]);
+  }, [qty, hasOwnKey, lifetimeGenerated, duration, sourceType, requestSourceText, openModal, resetVideoTracking]);
+
+  const regenerateRoteiro = useCallback(
+    async (idx: number) => {
+      if (!hasOwnKey && lifetimeGenerated + 1 > FREE_LIFETIME_LIMIT) {
+        openModal({ type: "upgrade", auto: true });
+        return;
+      }
+      setRegeneratingIndex(idx);
+      setGenerateError(null);
+      try {
+        const res = await fetch("/api/roteiros/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ qty: 1, duration, sourceType, sourceText: requestSourceText() }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          if (data.error === "limit_reached") {
+            setLifetimeGenerated(FREE_LIFETIME_LIMIT);
+            openModal({ type: "upgrade", auto: true });
+          } else {
+            setGenerateError("Não foi possível regenerar agora.");
+          }
+          return;
+        }
+        const [newRoteiro] = data.roteiros;
+        if (newRoteiro) setRoteiros((prev) => prev.map((r, i) => (i === idx ? newRoteiro : r)));
+        if (data.mode === "free" && typeof data.remaining === "number") {
+          setLifetimeGenerated(FREE_LIFETIME_LIMIT - data.remaining);
+        }
+      } catch {
+        setGenerateError("Falha de conexão. Tente novamente.");
+      } finally {
+        setRegeneratingIndex(null);
+      }
+    },
+    [hasOwnKey, lifetimeGenerated, duration, sourceType, requestSourceText, openModal],
+  );
 
   const saveCurrentRecording = useCallback(() => {
     setSavedTemas((prev) => prev.map((v, i) => (i === scriptIndex ? true : v)));
@@ -359,9 +455,7 @@ export function WizardProvider({
   }, [scriptIndex, roteiros.length]);
 
   const toggleSelectedForVideo = useCallback((idx: number) => {
-    setSelectedForVideo((prev) =>
-      prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx],
-    );
+    setSelectedForVideo((prev) => (prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]));
   }, []);
 
   const confirmBuild = useCallback((): boolean => {
@@ -372,44 +466,65 @@ export function WizardProvider({
       style: selectedStyle,
     }));
     const label = sourceLabel() ?? "fonte selecionada";
-    applyVideos(
-      built,
-      `${indices.length} vídeos gerados hoje · estilo ${selectedStyle} · fonte: ${label}`,
-    );
+    applyVideos(built, `${indices.length} vídeos gerados hoje · estilo ${selectedStyle} · fonte: ${label}`);
     setUsedTemas((prev) => prev.map((v, i) => (indices.includes(i) ? true : v)));
     setSelectedForVideo([]);
     return true;
   }, [selectedForVideo, selectedStyle, sourceLabel, applyVideos]);
 
   const clickAutoGenerate = useCallback(() => {
-    const limit = plan === "free" ? freeLimit() : null;
-    if (plan === "free" && limit === 0) {
+    if (!hasOwnKey && lifetimeGenerated >= FREE_LIFETIME_LIMIT) {
       openModal({ type: "upgrade", auto: true });
       return;
     }
-    const remaining = plan === "free" ? Math.max(0, (limit as number) - dailyGenerated) : 3;
-    if (plan === "free" && remaining === 0) {
-      openModal({ type: "upgrade", auto: true });
-      return;
-    }
-    const n = plan === "free" ? remaining : 3;
+    const n = hasOwnKey ? 3 : Math.max(1, Math.min(3, FREE_LIFETIME_LIMIT - lifetimeGenerated));
     openModal({
       type: "autoProgress",
-      onDone: () => {
-        generateRoteirosInternal(n);
-        setSavedTemas(new Array(n).fill(true));
-        const label = sourceLabel() ?? "fonte selecionada";
-        applyVideos(
-          Array.from({ length: n }, (_, i) => ({ title: `Tema ${String(i + 1).padStart(2, "0")}` })),
-          `${n} vídeos gerados hoje · fonte: ${label}`,
-        );
-        if (plan === "free") {
-          setDailyGenerated((d) => Math.min(limit as number, d + n));
+      onDone: async () => {
+        setGenerating(true);
+        setGenerateError(null);
+        try {
+          const res = await fetch("/api/roteiros/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ qty: n, duration, sourceType, sourceText: requestSourceText() }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            setGenerateError("Não foi possível gerar agora.");
+            return;
+          }
+          setRoteiros(data.roteiros);
+          resetVideoTracking(data.roteiros.length);
+          setSavedTemas(new Array(data.roteiros.length).fill(true));
+          const label = sourceLabel() ?? "fonte selecionada";
+          applyVideos(
+            data.roteiros.map((_: Roteiro, i: number) => ({ title: `Tema ${String(i + 1).padStart(2, "0")}` })),
+            `${data.roteiros.length} vídeos gerados hoje · fonte: ${label}`,
+          );
+          if (data.mode === "free" && typeof data.remaining === "number") {
+            setLifetimeGenerated(FREE_LIFETIME_LIMIT - data.remaining);
+          }
+        } catch {
+          setGenerateError("Falha de conexão. Tente novamente.");
+        } finally {
+          setGenerating(false);
+          closeModal();
         }
-        closeModal();
       },
     });
-  }, [plan, freeLimit, dailyGenerated, openModal, generateRoteirosInternal, sourceLabel, applyVideos, closeModal]);
+  }, [
+    hasOwnKey,
+    lifetimeGenerated,
+    duration,
+    sourceType,
+    requestSourceText,
+    openModal,
+    resetVideoTracking,
+    sourceLabel,
+    applyVideos,
+    closeModal,
+  ]);
 
   const publishVideo = useCallback(
     (idx: number) => {
@@ -419,9 +534,7 @@ export function WizardProvider({
       }
       setVideos((prev) => prev.map((v, i) => (i === idx ? { ...v, publishing: true } : v)));
       setTimeout(() => {
-        setVideos((prev) =>
-          prev.map((v, i) => (i === idx ? { ...v, publishing: false, published: true } : v)),
-        );
+        setVideos((prev) => prev.map((v, i) => (i === idx ? { ...v, publishing: false, published: true } : v)));
       }, 1400);
     },
     [tiktokConnected, openModal],
@@ -464,12 +577,18 @@ export function WizardProvider({
     () => ({
       accountName,
       plan,
-      freeDay,
-      dailyGenerated,
       voiceCloned,
       selectedVoiceName,
       tiktokConnected,
       tiktokHandle,
+      lifetimeGenerated,
+      hasOwnKey,
+      ownKeyProvider,
+      savingKey,
+      keyError,
+      generating,
+      generateError,
+      regeneratingIndex,
       sourceType,
       ebookFileName,
       texto,
@@ -508,8 +627,9 @@ export function WizardProvider({
       setPlan,
       requestPro,
       confirmUpgrade,
-      bumpFreeDay,
-      freeLimit,
+      refreshUsage,
+      saveOwnKey,
+      removeOwnKey,
       editRoteiroText,
       regenerateRoteiro,
       clickGerar,
@@ -529,12 +649,18 @@ export function WizardProvider({
     [
       accountName,
       plan,
-      freeDay,
-      dailyGenerated,
       voiceCloned,
       selectedVoiceName,
       tiktokConnected,
       tiktokHandle,
+      lifetimeGenerated,
+      hasOwnKey,
+      ownKeyProvider,
+      savingKey,
+      keyError,
+      generating,
+      generateError,
+      regeneratingIndex,
       sourceType,
       ebookFileName,
       texto,
@@ -566,8 +692,9 @@ export function WizardProvider({
       setPlan,
       requestPro,
       confirmUpgrade,
-      bumpFreeDay,
-      freeLimit,
+      refreshUsage,
+      saveOwnKey,
+      removeOwnKey,
       editRoteiroText,
       regenerateRoteiro,
       clickGerar,

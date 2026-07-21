@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/lib/icons";
+import { FREE_LIFETIME_LIMIT } from "@/lib/plan";
+import { PROVIDER_LABELS } from "@/lib/ai/generate-roteiros";
 import { useWizard } from "@/lib/wizard-context";
 import { Btn, Card, HelpTip, IconBtn, Pill, TextArea } from "@/components/app/ui";
 
@@ -12,8 +14,7 @@ export default function RoteirosPage() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
 
-  const limit = wizard.freeLimit();
-  const remaining = Math.max(0, limit - wizard.dailyGenerated);
+  const remaining = Math.max(0, FREE_LIFETIME_LIMIT - wizard.lifetimeGenerated);
 
   return (
     <Card>
@@ -28,39 +29,27 @@ export default function RoteirosPage() {
             Pro
           </Pill>
           <HelpTip
-            label="Diferença entre Free e Pro"
+            label="Diferença entre Free e chave própria"
             text={
               <>
-                <strong>Free:</strong> 3 vídeos/dia nos primeiros 3 dias, depois 2/dia (dias 4-6), depois 1/dia (dias
-                7-9), e bloqueia depois disso. <strong>Pro:</strong> sem limite, com voz clonada e publicação
-                automática no TikTok.
+                <strong>Free:</strong> {FREE_LIFETIME_LIMIT} gerações no total (não é por dia). Para gerar sem
+                limite, conecte sua própria chave de API (OpenAI, Gemini ou Anthropic) em &quot;Minha chave de
+                API&quot;.
               </>
             }
           />
         </div>
       </div>
 
-      {wizard.plan === "free" && (
-        <div className="flex items-center gap-2 mt-3">
-          <span className="text-[13px] text-[var(--text-2)]">Simular:</span>
-          <IconBtn aria-label="Diminuir dia simulado" onClick={() => wizard.bumpFreeDay(-1)}>
-            <Icon name="minus" />
-          </IconBtn>
-          <span className="text-[13px] text-[var(--text-2)] font-mono">
-            Dia {wizard.freeDay} · {limit === 0 ? "bloqueado" : `${limit} vídeo${limit === 1 ? "" : "s"}/dia`}
-          </span>
-          <IconBtn aria-label="Aumentar dia simulado" onClick={() => wizard.bumpFreeDay(1)}>
-            <Icon name="plus" />
-          </IconBtn>
-          <HelpTip
-            label="O que é isso"
-            text="Simulador só pra teste do protótipo — na versão real, o dia avança sozinho com o calendário, contando a partir do cadastro do usuário."
-          />
-        </div>
-      )}
-
       <p className="text-[13px] text-[var(--text-2)] mt-3 leading-relaxed">
         Baseados nos temas extraídos da fonte. Escolha a duração e a quantidade antes de gravar.
+        {wizard.sourceType !== "texto" && (
+          <>
+            {" "}
+            <Icon name="alert-triangle" /> Hoje só o texto colado é lido de verdade pela IA — PDF, link e YouTube
+            ainda servem só como indício de tema, não são extraídos.
+          </>
+        )}
       </p>
 
       <div className="flex items-end flex-wrap gap-8 mt-4">
@@ -79,7 +68,7 @@ export default function RoteirosPage() {
             Vídeos por vez
             <HelpTip
               label="O que significa vídeos por vez"
-              text='Quantos roteiros o botão "Gerar" cria de uma vez. No plano Free, isso é limitado ao seu saldo diário restante (até 3 no total por dia).'
+              text='Quantos roteiros o botão "Gerar" cria de uma vez. Sem chave própria, isso é limitado ao seu saldo restante do plano Free.'
             />
           </span>
           <div className="flex items-center gap-2.5">
@@ -92,40 +81,49 @@ export default function RoteirosPage() {
             <IconBtn aria-label="Aumentar quantidade" onClick={() => wizard.setQty(wizard.qty + 1)}>
               <Icon name="plus" />
             </IconBtn>
-            <Btn variant="primary" className="ml-2.5" onClick={wizard.clickGerar} disabled={wizard.plan === "free" && limit === 0}>
-              <Icon name="bolt" /> Gerar
+            <Btn
+              variant="primary"
+              className="ml-2.5"
+              onClick={wizard.clickGerar}
+              disabled={wizard.generating || (!wizard.hasOwnKey && wizard.qtyMax() === 0)}
+            >
+              <Icon name="loader-2" spin={wizard.generating} className={wizard.generating ? "" : "hidden"} />
+              <Icon name="bolt" className={wizard.generating ? "hidden" : ""} />
+              {wizard.generating ? "Gerando..." : "Gerar"}
             </Btn>
           </div>
         </div>
       </div>
 
       <p className="text-[13px] text-[var(--text-2)] mt-3 leading-relaxed">
-        {wizard.plan === "pro" ? (
+        {wizard.hasOwnKey ? (
           <>
-            <Icon name="infinity" /> Plano Pro: gere quantos vídeos quiser, sem limite diário.
+            <Icon name="infinity" /> Chave própria conectada ({PROVIDER_LABELS[wizard.ownKeyProvider!]}): geração
+            sem limite.
           </>
-        ) : limit === 0 ? (
+        ) : remaining === 0 ? (
           <>
-            <Icon name="lock" /> Seu período Free acabou (21 dias).{" "}
-            <button className="text-[var(--gold)] underline-offset-2 hover:underline" onClick={wizard.requestPro}>
-              Fazer upgrade para o Pro
+            <Icon name="lock" /> Suas {FREE_LIFETIME_LIMIT} gerações grátis acabaram.{" "}
+            <button
+              className="text-[var(--gold)] underline-offset-2 hover:underline"
+              onClick={() => wizard.openModal({ type: "account", accountType: "apikey" })}
+            >
+              Adicionar minha chave de API
             </button>{" "}
-            para continuar gerando.
+            para continuar gerando sem limite.
           </>
-        ) : remaining > 0 ? (
-          `Plano Free: ${remaining} de ${limit} vídeos disponíveis hoje.`
         ) : (
-          <>
-            <Icon name="lock" /> Limite diário do plano Free atingido ({limit} vídeo{limit === 1 ? "" : "s"}).{" "}
-            <button className="text-[var(--gold)] underline-offset-2 hover:underline" onClick={wizard.requestPro}>
-              Fazer upgrade para o Pro
-            </button>{" "}
-            para gerar sem limite.
-          </>
+          `Plano Free: ${remaining} de ${FREE_LIFETIME_LIMIT} gerações restantes (uso total, não diário).`
         )}
       </p>
 
-      <div className="flex items-center gap-2.5 mt-3">
+      {wizard.generateError && (
+        <p className="text-[13px] text-[var(--gold)] mt-2 leading-relaxed">
+          <Icon name="alert-triangle" /> {wizard.generateError}
+        </p>
+      )}
+
+      <div className="flex items-center gap-2.5 mt-3 flex-wrap">
         <Btn
           className={wizard.plan !== "pro" ? "opacity-55 hover:opacity-75 hover:border-[var(--gold)] hover:text-[var(--gold)]" : ""}
           onClick={() => (wizard.plan !== "pro" ? wizard.requestPro() : wizard.openModal({ type: "eleven" }))}
@@ -144,6 +142,18 @@ export default function RoteirosPage() {
             </>
           ) : null}
         </span>
+      </div>
+
+      <div className="flex items-center gap-2.5 mt-2 flex-wrap">
+        <Btn onClick={() => wizard.openModal({ type: "account", accountType: "apikey" })}>
+          <Icon name="key" /> Minha chave de API
+        </Btn>
+        {wizard.hasOwnKey && (
+          <span className="text-[13px] text-[var(--text-2)]">
+            <Icon name="circle-check" className="text-[var(--teal)]" /> Chave conectada:{" "}
+            {PROVIDER_LABELS[wizard.ownKeyProvider!]}
+          </span>
+        )}
       </div>
 
       <div className="flex flex-col gap-3 mt-6">
@@ -191,9 +201,11 @@ export default function RoteirosPage() {
               <button
                 aria-label="Regenerar roteiro"
                 onClick={() => wizard.regenerateRoteiro(idx)}
-                className="flex items-center gap-1.5 px-4 py-2.5 text-[13.5px] font-medium rounded-[9px] border-[0.5px] border-[var(--line)] text-[var(--text-2)] bg-transparent cursor-pointer whitespace-nowrap transition-all hover:border-[var(--teal)] hover:text-[var(--teal)]"
+                disabled={wizard.regeneratingIndex === idx}
+                className="flex items-center gap-1.5 px-4 py-2.5 text-[13.5px] font-medium rounded-[9px] border-[0.5px] border-[var(--line)] text-[var(--text-2)] bg-transparent cursor-pointer whitespace-nowrap transition-all hover:border-[var(--teal)] hover:text-[var(--teal)] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Icon name="sparkles" /> Regenerar
+                <Icon name={wizard.regeneratingIndex === idx ? "loader-2" : "sparkles"} spin={wizard.regeneratingIndex === idx} />{" "}
+                {wizard.regeneratingIndex === idx ? "Regenerando..." : "Regenerar"}
               </button>
             </div>
           </div>

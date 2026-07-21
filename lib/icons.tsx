@@ -43,6 +43,7 @@ const ICON_PATHS: Record<string, string> = {
   "brand-whatsapp": '<path d="M4 20l1.4-4.2A8 8 0 1 1 9 19.5z"/><path d="M9 9c0 3 3 6 6 6c.5 0 1-.5 1-1.2c0-.3-.2-.5-.5-.7l-1.6-.9c-.3-.2-.6-.1-.8.1l-.5.6c-1-.6-1.9-1.5-2.5-2.5l.6-.5c.2-.2.3-.5.1-.8l-.9-1.6c-.2-.3-.4-.5-.7-.5C9.5 7 9 7.5 9 8z"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.8 1c0 1.5-2.3 1.8-2.3 3.5"/><path d="M12 17h.01"/>',
   "message-bot": '<rect x="4" y="5" width="16" height="11" rx="3"/><path d="M8 21l4-4l4 4"/><path d="M9 10h.01"/><path d="M15 10h.01"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="M10.5 12.5L20 3"/><path d="M17 6l3 3"/><path d="M14 9l3 3"/>',
   sparkles: '<path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z"/><path d="M18 17l.7 2.1l2.1.7l-2.1.7l-.7 2.1l-.7-2.1l-2.1-.7l2.1-.7z"/>',
   square: '<rect x="4" y="4" width="16" height="16" rx="2"/>',
   typography: '<path d="M4 20h4"/><path d="M14 20h6"/><path d="M6.9 15h6.2"/><path d="M9.5 5h2l4 15h-2l-1.1-4h-6.8l-1.1 4h-2z"/>',
