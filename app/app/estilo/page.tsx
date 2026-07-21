@@ -144,16 +144,27 @@ export default function EstiloPage() {
         </p>
       )}
 
+      {wizard.buildError && (
+        <p className="text-[13px] text-[var(--gold)] mt-3">
+          <Icon name="alert-triangle" /> {wizard.buildError}
+        </p>
+      )}
+
       <div className="mt-8">
         <Btn
           variant="primary"
-          onClick={() => {
-            const built = wizard.confirmBuild();
+          disabled={wizard.buildingVideos}
+          onClick={async () => {
+            if (wizard.selectedForVideo.length === 0) {
+              setShowWarning(true);
+              return;
+            }
+            const built = await wizard.confirmBuild();
             if (built) router.push("/app/download");
-            else setShowWarning(true);
           }}
         >
-          Confirmar e montar vídeo <Icon name="arrow-right" />
+          <Icon name={wizard.buildingVideos ? "loader-2" : "arrow-right"} spin={wizard.buildingVideos} />{" "}
+          {wizard.buildingVideos ? "Buscando imagens..." : "Confirmar e montar vídeo"}
         </Btn>
       </div>
     </Card>

@@ -22,8 +22,11 @@ export default function DownloadPage() {
         <div className="grid grid-cols-3 gap-4 max-[640px]:grid-cols-2 max-[420px]:grid-cols-1">
           {wizard.videos.map((video, idx) => (
             <div key={idx} className="border-[0.5px] border-[var(--line)] rounded-xl overflow-hidden transition-all hover:border-[var(--line-strong)] hover:-translate-y-0.5">
-              <div className="aspect-[9/16] bg-[var(--bg-2)] flex items-center justify-center text-[var(--text-3)] text-[22px] relative">
-                <Icon name="player-play" />
+              <div
+                className="aspect-[9/16] bg-[var(--bg-2)] bg-cover bg-center flex items-center justify-center text-[var(--text-3)] text-[22px] relative"
+                style={video.imageUrl ? { backgroundImage: `url(${video.imageUrl})` } : undefined}
+              >
+                {!video.imageUrl && <Icon name="player-play" />}
                 <span className="absolute bottom-2 right-2 font-mono text-[10px] bg-black/55 px-1.5 py-1 rounded-md text-[var(--text-1)]">
                   0:30
                 </span>
@@ -74,10 +77,10 @@ export default function DownloadPage() {
       </div>
 
       <div className="flex items-center mt-3 font-mono text-[11px] text-[var(--text-3)]">
-        <Icon name="photo" className="mr-1.5" /> Imagens de Unsplash · Pexels · Pixabay
+        <Icon name="photo" className="mr-1.5" /> Imagens do Pexels
         <HelpTip
           label="Como funcionam as imagens automáticas"
-          text="As imagens de cada vídeo vêm automaticamente desses três bancos gratuitos, escolhidas com base no tema do roteiro. Nenhuma é paga e nenhuma exige atribuição manual da sua parte."
+          text="A imagem de cada vídeo vem automaticamente do Pexels, escolhida com base no texto do roteiro. Nenhuma é paga e nenhuma exige atribuição manual da sua parte."
         />
       </div>
     </Card>

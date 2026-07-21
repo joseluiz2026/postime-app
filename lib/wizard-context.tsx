@@ -32,6 +32,8 @@ export type Video = {
   style?: string;
   publishing?: boolean;
   published?: boolean;
+  imageUrl?: string;
+  imageCredit?: string;
 };
 
 export type ModalId =
@@ -101,6 +103,9 @@ type WizardState = {
   savedTemas: boolean[];
   usedTemas: boolean[];
   selectedForVideo: number[];
+  audioPaths: (string | null)[];
+  audioUploading: boolean;
+  audioError: string | null;
 
   // estilo
   selectedStyle: StyleName;
@@ -146,11 +151,13 @@ type WizardContextValue = WizardState & {
   clickGerar: () => Promise<void>;
 
   setScriptIndex: (i: number) => void;
-  saveCurrentRecording: () => void;
+  uploadRecording: (idx: number, file: Blob, ext: string) => Promise<boolean>;
   toggleSelectedForVideo: (idx: number) => void;
 
   setSelectedStyle: (s: StyleName) => void;
-  confirmBuild: () => boolean;
+  confirmBuild: () => Promise<boolean>;
+  buildingVideos: boolean;
+  buildError: string | null;
 
   clickAutoGenerate: () => void;
 
@@ -170,10 +177,12 @@ export function WizardProvider({
   children,
   initialName,
   userEmail,
+  userId,
 }: {
   children: ReactNode;
   initialName: string;
   userEmail: string;
+  userId: string;
 }) {
   const router = useRouter();
   const [accountName, setAccountNameState] = useState(initialName);
@@ -208,11 +217,16 @@ export function WizardProvider({
   const [savedTemas, setSavedTemas] = useState<boolean[]>([]);
   const [usedTemas, setUsedTemas] = useState<boolean[]>([]);
   const [selectedForVideo, setSelectedForVideo] = useState<number[]>([]);
+  const [audioPaths, setAudioPaths] = useState<(string | null)[]>([]);
+  const [audioUploading, setAudioUploading] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
 
   const [selectedStyle, setSelectedStyle] = useState<StyleName>("Minimalista");
 
   const [videos, setVideos] = useState<Video[]>([]);
   const [videoCountStatus, setVideoCountStatus] = useState("");
+  const [buildingVideos, setBuildingVideos] = useState(false);
+  const [buildError, setBuildError] = useState<string | null>(null);
   const whatsappPromptShown = useRef(false);
 
   const [modal, setModal] = useState<ModalState>({ type: null });
@@ -350,6 +364,7 @@ export function WizardProvider({
     setSavedTemas(new Array(n).fill(false));
     setUsedTemas(new Array(n).fill(false));
     setSelectedForVideo([]);
+    setAudioPaths(new Array(n).fill(null));
   }, []);
 
   const applyVideos = useCallback(
@@ -449,28 +464,78 @@ export function WizardProvider({
     [hasOwnKey, lifetimeGenerated, duration, sourceType, requestSourceText, openModal],
   );
 
-  const saveCurrentRecording = useCallback(() => {
-    setSavedTemas((prev) => prev.map((v, i) => (i === scriptIndex ? true : v)));
-    setScriptIndex((i) => Math.min(i + 1, roteiros.length - 1));
-  }, [scriptIndex, roteiros.length]);
+  const uploadRecording = useCallback(
+    async (idx: number, file: Blob, ext: string): Promise<boolean> => {
+      setAudioUploading(true);
+      setAudioError(null);
+      try {
+        const supabase = createClient();
+        const path = `${userId}/${idx}.${ext}`;
+        const { error } = await supabase.storage
+          .from("postime-audio")
+          .upload(path, file, { upsert: true, contentType: file.type || undefined });
+        if (error) {
+          setAudioError("Não foi possível salvar o áudio agora. Tente novamente.");
+          return false;
+        }
+        setAudioPaths((prev) => {
+          const next = [...prev];
+          next[idx] = path;
+          return next;
+        });
+        setSavedTemas((prev) => prev.map((v, i) => (i === idx ? true : v)));
+        setScriptIndex((i) => Math.min(i + 1, roteiros.length - 1));
+        return true;
+      } catch {
+        setAudioError("Falha de conexão. Tente novamente.");
+        return false;
+      } finally {
+        setAudioUploading(false);
+      }
+    },
+    [userId, roteiros.length],
+  );
 
   const toggleSelectedForVideo = useCallback((idx: number) => {
     setSelectedForVideo((prev) => (prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]));
   }, []);
 
-  const confirmBuild = useCallback((): boolean => {
+  const confirmBuild = useCallback(async (): Promise<boolean> => {
     if (selectedForVideo.length === 0) return false;
     const indices = [...selectedForVideo].sort((a, b) => a - b);
-    const built: Video[] = indices.map((i) => ({
-      title: `Tema ${String(i + 1).padStart(2, "0")} · ${selectedStyle}`,
-      style: selectedStyle,
-    }));
-    const label = sourceLabel() ?? "fonte selecionada";
-    applyVideos(built, `${indices.length} vídeos gerados hoje · estilo ${selectedStyle} · fonte: ${label}`);
-    setUsedTemas((prev) => prev.map((v, i) => (indices.includes(i) ? true : v)));
-    setSelectedForVideo([]);
-    return true;
-  }, [selectedForVideo, selectedStyle, sourceLabel, applyVideos]);
+    setBuildingVideos(true);
+    setBuildError(null);
+    try {
+      const queries = indices.map((i) => roteiros[i]?.text ?? "");
+      const res = await fetch("/api/scenes/images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queries }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBuildError("Não foi possível buscar as imagens agora. Tente novamente.");
+        return false;
+      }
+      const images: ({ url: string; photographer: string } | null)[] = data.images;
+      const built: Video[] = indices.map((i, pos) => ({
+        title: `Tema ${String(i + 1).padStart(2, "0")} · ${selectedStyle}`,
+        style: selectedStyle,
+        imageUrl: images[pos]?.url,
+        imageCredit: images[pos]?.photographer,
+      }));
+      const label = sourceLabel() ?? "fonte selecionada";
+      applyVideos(built, `${indices.length} vídeos gerados hoje · estilo ${selectedStyle} · fonte: ${label}`);
+      setUsedTemas((prev) => prev.map((v, i) => (indices.includes(i) ? true : v)));
+      setSelectedForVideo([]);
+      return true;
+    } catch {
+      setBuildError("Falha de conexão. Tente novamente.");
+      return false;
+    } finally {
+      setBuildingVideos(false);
+    }
+  }, [selectedForVideo, selectedStyle, sourceLabel, applyVideos, roteiros]);
 
   const clickAutoGenerate = useCallback(() => {
     if (!hasOwnKey && lifetimeGenerated >= FREE_LIFETIME_LIMIT) {
@@ -603,9 +668,14 @@ export function WizardProvider({
       savedTemas,
       usedTemas,
       selectedForVideo,
+      audioPaths,
+      audioUploading,
+      audioError,
       selectedStyle,
       videos,
       videoCountStatus,
+      buildingVideos,
+      buildError,
       modal,
       userEmail,
       setAccountName,
@@ -634,7 +704,7 @@ export function WizardProvider({
       regenerateRoteiro,
       clickGerar,
       setScriptIndex,
-      saveCurrentRecording,
+      uploadRecording,
       toggleSelectedForVideo,
       setSelectedStyle,
       confirmBuild,
@@ -675,9 +745,14 @@ export function WizardProvider({
       savedTemas,
       usedTemas,
       selectedForVideo,
+      audioPaths,
+      audioUploading,
+      audioError,
       selectedStyle,
       videos,
       videoCountStatus,
+      buildingVideos,
+      buildError,
       modal,
       userEmail,
       setAccountName,
@@ -698,7 +773,7 @@ export function WizardProvider({
       editRoteiroText,
       regenerateRoteiro,
       clickGerar,
-      saveCurrentRecording,
+      uploadRecording,
       toggleSelectedForVideo,
       confirmBuild,
       clickAutoGenerate,

@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <ThemeProvider>
-    <WizardProvider initialName={initialName} userEmail={user.email ?? ""}>
+    <WizardProvider initialName={initialName} userEmail={user.email ?? ""} userId={user.id}>
       <div className="max-w-[880px] mx-auto px-8 pt-10 pb-24">
         <div className="bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] border-b-[2.5px] border-b-[var(--gold)] rounded-[18px] px-8 pt-9 pb-[30px] mb-8">
           <div className="flex justify-between items-start gap-8 flex-wrap">

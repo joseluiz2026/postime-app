@@ -22,7 +22,14 @@ export default function GravacaoPage() {
   const [phase, setPhase] = useState<RecPhase>("idle");
   const [seconds, setSeconds] = useState(0);
   const [mp3File, setMp3File] = useState<File | null>(null);
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const [micError, setMicError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
   const [allDone, setAllDone] = useState(false);
   const [prevIdx, setPrevIdx] = useState<number | null>(null);
 
@@ -37,11 +44,29 @@ export default function GravacaoPage() {
     }
   }
 
+  function stopStream() {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }
+
+  function stopPlayback() {
+    audioElRef.current?.pause();
+    audioElRef.current = null;
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+  }
+
   function resetRec() {
     setPhase("idle");
     setSeconds(0);
     setMp3File(null);
+    setRecordedBlob(null);
+    setMicError(null);
     clearTimer();
+    stopStream();
+    stopPlayback();
   }
 
   if (idx !== prevIdx) {
@@ -49,52 +74,91 @@ export default function GravacaoPage() {
     setPhase("idle");
     setSeconds(0);
     setMp3File(null);
+    setRecordedBlob(null);
+    setMicError(null);
     setAllDone(false);
   }
 
   useEffect(() => {
     clearTimer();
+    stopStream();
+    stopPlayback();
   }, [idx]);
 
   useEffect(() => {
-    return () => clearTimer();
+    return () => {
+      clearTimer();
+      stopStream();
+      stopPlayback();
+    };
   }, []);
 
   function goTo(i: number) {
     wizard.setScriptIndex(i);
   }
 
-  function toggleRecord() {
+  async function toggleRecord() {
     if (mode === "upload") return;
     if (phase === "idle") {
-      setPhase("recording");
-      setSeconds(0);
-      timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+      setMicError(null);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        streamRef.current = stream;
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+        const recorder = new MediaRecorder(stream, { mimeType });
+        chunksRef.current = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunksRef.current.push(e.data);
+        };
+        recorder.onstop = () => {
+          setRecordedBlob(new Blob(chunksRef.current, { type: mimeType }));
+          stopStream();
+        };
+        recorder.start();
+        recorderRef.current = recorder;
+        setPhase("recording");
+        setSeconds(0);
+        timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+      } catch {
+        setMicError("Não foi possível acessar o microfone. Verifique a permissão do navegador para este site.");
+      }
     } else if (phase === "recording") {
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = null;
+      recorderRef.current?.stop();
+      clearTimer();
       setPhase("ready");
     }
   }
 
-  function listen() {
-    if (phase !== "ready") return;
-    setPhase("listening");
-    setTimeout(() => {
-      setPhase((p) => (p === "listening" ? "ready" : p));
-    }, 1600);
+  function toggleListen() {
+    if (phase === "ready") {
+      const source = mode === "upload" ? mp3File : recordedBlob;
+      if (!source) return;
+      const url = URL.createObjectURL(source);
+      audioUrlRef.current = url;
+      const audio = new Audio(url);
+      audio.onended = () => {
+        setPhase((p) => (p === "listening" ? "ready" : p));
+      };
+      audioElRef.current = audio;
+      audio.play();
+      setPhase("listening");
+    } else if (phase === "listening") {
+      audioElRef.current?.pause();
+      setPhase("ready");
+    }
   }
 
-  function save() {
+  async function save() {
     if (phase !== "ready" && phase !== "listening") return;
+    const source = mode === "upload" ? mp3File : recordedBlob;
+    if (!source) return;
+    stopPlayback();
+    const ext = mode === "upload" ? "mp3" : recordedBlob?.type.includes("webm") ? "webm" : "m4a";
     const wasLast = idx >= slides.length - 1;
-    wizard.saveCurrentRecording();
-    if (wasLast) {
-      setAllDone(true);
-      resetRec();
-    } else {
-      resetRec();
-    }
+    const ok = await wizard.uploadRecording(idx, source, ext);
+    if (!ok) return;
+    if (wasLast) setAllDone(true);
+    resetRec();
   }
 
   if (!current) {
@@ -202,12 +266,18 @@ export default function GravacaoPage() {
                 }
               />
             </button>
-            <div className="font-mono text-xs text-[var(--text-2)] mb-8 tracking-wide">
+            <div className="font-mono text-xs text-[var(--text-2)] mb-2 tracking-wide">
               {phase === "idle" && `Pronto para gravar · 00:00`}
               {phase === "recording" && `Gravando... ${formatTime(seconds)}`}
               {phase === "ready" && `Áudio pronto · ${formatTime(seconds)}`}
               {phase === "listening" && `Reproduzindo... ${formatTime(seconds)}`}
             </div>
+            {micError && (
+              <p className="text-[12.5px] text-[var(--gold)] max-w-[380px] mb-6 flex items-center gap-1.5">
+                <Icon name="alert-triangle" /> {micError}
+              </p>
+            )}
+            {!micError && <div className="mb-6" />}
           </div>
         )}
 
@@ -228,17 +298,24 @@ export default function GravacaoPage() {
 
         {(phase === "ready" || phase === "listening") && (
           <div className="flex gap-2.5 mt-5 flex-wrap justify-center">
-            <Btn onClick={listen}>
+            <Btn onClick={toggleListen} disabled={wizard.audioUploading}>
               <Icon name={phase === "listening" ? "player-pause" : "headphones"} />{" "}
               {phase === "listening" ? "Ouvindo..." : "Ouvir"}
             </Btn>
-            <Btn variant="primary" onClick={save}>
-              <Icon name="check" /> Salvar e ir para o próximo
+            <Btn variant="primary" onClick={save} disabled={wizard.audioUploading}>
+              <Icon name={wizard.audioUploading ? "loader-2" : "check"} />{" "}
+              {wizard.audioUploading ? "Salvando..." : "Salvar e ir para o próximo"}
             </Btn>
-            <Btn variant="ghost" onClick={resetRec}>
+            <Btn variant="ghost" onClick={resetRec} disabled={wizard.audioUploading}>
               Refazer
             </Btn>
           </div>
+        )}
+
+        {wizard.audioError && (
+          <p className="text-[12.5px] text-[var(--gold)] max-w-[380px] mt-3 flex items-center gap-1.5">
+            <Icon name="alert-triangle" /> {wizard.audioError}
+          </p>
         )}
 
         {allDone && (
