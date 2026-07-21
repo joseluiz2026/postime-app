@@ -79,6 +79,6 @@ export async function POST(request: Request) {
     if (/api key|unauthorized|401|invalid/i.test(message)) {
       return NextResponse.json({ error: "invalid_key" }, { status: 401 });
     }
-    return NextResponse.json({ error: "generation_failed" }, { status: 502 });
+    return NextResponse.json({ error: "generation_failed", debug: message }, { status: 502 });
   }
 }
