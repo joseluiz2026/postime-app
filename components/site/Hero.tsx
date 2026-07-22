@@ -12,7 +12,7 @@ export function Hero() {
           alt="Pessoa gravando um vídeo para TikTok com o celular"
           fill
           priority
-          className="object-cover object-[center_25%]"
+          className="object-cover object-[center_25%] max-[640px]:object-[83%_25%]"
         />
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(11,18,32,0.97)_0%,rgba(11,18,32,0.88)_32%,rgba(11,18,32,0.45)_58%,rgba(11,18,32,0.25)_100%)]" />
       </div>
