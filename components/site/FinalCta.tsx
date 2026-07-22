@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { TRIAL_DAYS } from "@/lib/plan";
 import { SiteBtn } from "./ui";
 
 export function FinalCta() {
@@ -18,7 +19,7 @@ export function FinalCta() {
           Seu próximo vídeo pode estar pronto em 3 minutos.
         </h2>
         <p className="mt-3.5 text-base text-[var(--text-2)] leading-relaxed">
-          9 dias grátis. Sem cartão. Sem desculpa pra não postar hoje.
+          {TRIAL_DAYS} dias grátis. Sem cartão. Sem desculpa pra não postar hoje.
         </p>
         <div className="mt-8 flex justify-center">
           <SiteBtn href="/cadastro" large>

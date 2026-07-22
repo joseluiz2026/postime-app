@@ -24,7 +24,7 @@ export function Solution() {
               <p className="mt-3 text-base text-[var(--text-2)] leading-relaxed">
                 Dá o material — um PDF, um tema, um link, ou só uma ideia — e o POSTime cuida do resto: extrai os
                 assuntos, escreve os roteiros, narra com a sua voz, busca as imagens certas e monta o vídeo, pronto
-                pra publicar direto no TikTok.
+                pra baixar e postar no TikTok, Instagram ou onde quiser.
               </p>
             </div>
             <SiteBtn href="/cadastro" className="self-start mt-8">

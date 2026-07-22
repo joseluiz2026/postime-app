@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { Icon } from "@/lib/icons";
+import { TRIAL_DAYS } from "@/lib/plan";
 import { Eyebrow, SiteBtn } from "./ui";
 
 export function Hero() {
@@ -26,12 +27,12 @@ export function Hero() {
             </span>
           </h1>
           <p className="mt-6 text-lg max-w-[480px] text-[var(--text-2)] leading-relaxed">
-            Transforme qualquer PDF, tema ou vídeo em roteiros, narração e vídeos prontos pro TikTok — em minutos,
-            com a sua própria voz.
+            Transforme qualquer PDF, tema ou vídeo em roteiros, narração e vídeos verticais prontos pra TikTok,
+            Instagram e YouTube — em minutos, com a sua própria voz.
           </p>
           <div className="mt-8 flex items-center gap-4 flex-wrap">
             <SiteBtn href="/cadastro" large>
-              Testar grátis por 9 dias <Icon name="arrow-right" />
+              Testar grátis por {TRIAL_DAYS} dias <Icon name="arrow-right" />
             </SiteBtn>
             <SiteBtn href="#como-funciona" variant="ghost" large>
               Ver como funciona

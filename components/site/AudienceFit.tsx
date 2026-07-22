@@ -1,4 +1,5 @@
 import { Icon } from "@/lib/icons";
+import { TRIAL_DAYS } from "@/lib/plan";
 import { Eyebrow, SectionHead, SiteBtn } from "./ui";
 
 const PROFILES = [
@@ -10,7 +11,7 @@ const PROFILES = [
   {
     icon: "repeat",
     title: "Já tentou e não manteve o ritmo",
-    desc: "Consistência é o que mais pesa pro algoritmo do TikTok. Gere o próximo vídeo em minutos sempre que precisar postar.",
+    desc: "Consistência é o que mais pesa pro algoritmo, seja TikTok, Reels ou Shorts. Gere o próximo vídeo em minutos sempre que precisar postar.",
   },
   {
     icon: "microphone",
@@ -26,7 +27,7 @@ export function AudienceFit() {
         <SectionHead>
           <Eyebrow>Pra quem é o POSTime</Eyebrow>
           <h2 className="font-[var(--font-display)] font-extrabold text-[36px] leading-tight m-0">
-            Ideal pra quem está começando no TikTok e quer viralizar
+            Ideal pra quem está começando a criar conteúdo e quer viralizar
           </h2>
           <p className="mt-3 text-base text-[var(--text-2)] leading-relaxed">
             Não importa se você nunca gravou um vídeo ou já tentou antes e desistiu — o POSTime foi pensado pra
@@ -48,7 +49,7 @@ export function AudienceFit() {
 
         <div className="mt-10 flex items-center gap-4 flex-wrap">
           <SiteBtn href="/cadastro">Comece a postar hoje</SiteBtn>
-          <p className="text-sm text-[var(--text-3)]">9 dias grátis, sem cartão.</p>
+          <p className="text-sm text-[var(--text-3)]">{TRIAL_DAYS} dias grátis, sem cartão.</p>
         </div>
       </div>
     </section>

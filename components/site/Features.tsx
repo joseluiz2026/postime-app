@@ -1,13 +1,14 @@
 import { Icon } from "@/lib/icons";
+import { TRIAL_DAYS } from "@/lib/plan";
 import { Eyebrow, SectionHead, SiteBtn } from "./ui";
 
 const FEATURES = [
-  { icon: "microphone", title: "Sua voz, sempre", desc: "Grave na hora, envie um MP3, ou clone sua voz com IA." },
+  { icon: "microphone", title: "Sua voz, sempre", desc: "Grave na hora, envie um MP3, ou clone sua voz com IA (em breve)." },
   { icon: "photo", title: "Imagens automáticas", desc: "Busca sozinho em bancos gratuitos — ou use suas próprias fotos." },
   { icon: "layout-grid", title: "6 estilos visuais", desc: "De minimalista a neon bold, escolha a cara do seu vídeo." },
-  { icon: "brand-tiktok", title: "Publica direto no TikTok", desc: "Sem exportar, sem trocar de app." },
+  { icon: "brand-tiktok", title: "Pronto pra qualquer rede", desc: "Formato vertical, otimizado pra TikTok, Reels e Shorts." },
   { icon: "bolt", title: "Modo automático", desc: "Um clique e o vídeo sai pronto, sem passar por nenhuma etapa manual." },
-  { icon: "lock", title: "Seus dados, sua conta", desc: "Conecte TikTok e ElevenLabs com segurança, quando quiser." },
+  { icon: "lock", title: "Seus dados, sua conta", desc: "Conecte suas próprias chaves de API com segurança, quando quiser." },
 ];
 
 export function Features() {
@@ -35,7 +36,7 @@ export function Features() {
 
         <div className="mt-12 flex items-center gap-4 flex-wrap">
           <SiteBtn href="/cadastro">Testar todos os recursos</SiteBtn>
-          <p className="text-sm text-[var(--text-3)]">Grátis pelos primeiros 9 dias.</p>
+          <p className="text-sm text-[var(--text-3)]">Grátis pelos primeiros {TRIAL_DAYS} dias.</p>
         </div>
       </div>
     </section>

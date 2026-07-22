@@ -1,13 +1,14 @@
+import { TRIAL_DAYS } from "@/lib/plan";
 import { Eyebrow, SectionHead } from "./ui";
 
 const ITEMS = [
   {
     q: "Preciso colocar cartão de crédito para testar?",
-    a: "Não. O cadastro para os 9 dias grátis não exige pagamento nenhum — é só nome, e-mail e senha.",
+    a: `Não. O cadastro para os ${TRIAL_DAYS} dias grátis não exige pagamento nenhum — é só nome, e-mail e senha.`,
   },
   {
-    q: "O que acontece depois dos 9 dias?",
-    a: "Você pode assinar o plano Pro para continuar gerando sem limite. Se não assinar, sua conta fica pausada — seus vídeos continuam salvos.",
+    q: `O que acontece depois dos ${TRIAL_DAYS} dias?`,
+    a: "Você precisa de uma assinatura ativa para continuar gerando — não existe outro plano gratuito. Baixe seus vídeos assim que ficarem prontos: eles não ficam guardados na plataforma por muito tempo.",
   },
   {
     q: "Preciso saber editar vídeo?",
@@ -15,11 +16,11 @@ const ITEMS = [
   },
   {
     q: "Funciona só para TikTok?",
-    a: "O foco é TikTok, com publicação direta na plataforma. Os vídeos gerados também podem ser baixados e usados em outras redes.",
+    a: "Não — os vídeos saem em formato vertical, prontos pra TikTok, Instagram Reels, YouTube Shorts e outras redes. Hoje você baixa e publica manualmente; publicação automática direto pela plataforma é um recurso futuro.",
   },
   {
     q: "Posso usar a minha própria voz?",
-    a: "Sim — grave direto no app, envie um áudio pronto, ou clone sua voz com IA no plano Pro.",
+    a: "Sim — grave direto no app ou envie um áudio pronto. Clonagem de voz com IA está a caminho.",
   },
 ];
 

@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { TRIAL_DAYS } from "@/lib/plan";
 import { Eyebrow, SiteBtn } from "./ui";
 
 export function TrialCta() {
@@ -18,17 +19,17 @@ export function TrialCta() {
             <h2 className="font-[var(--font-display)] font-extrabold text-[36px] leading-tight m-0">
               Comece agora.
               <br />
-              9 dias por nossa conta.
+              {TRIAL_DAYS} dias por nossa conta.
             </h2>
             <p className="mt-3.5 text-base text-[var(--text-2)] leading-relaxed">
-              Cadastro simples, sem burocracia. Você já começa gerando vídeos no mesmo dia.
+              Cadastro simples, sem burocracia. Você já começa gerando vídeos no mesmo dia, sem limite de uso.
             </p>
             <div className="mt-5 font-mono text-[13px] text-[var(--text-1)] bg-[color-mix(in_srgb,var(--bg-0)_60%,transparent)] border-[0.5px] border-[var(--line-strong)] rounded-xl px-5 py-4">
-              Depois disso, continue no <b className="text-[var(--text-1)]">plano Pro</b>: vídeos ilimitados, voz
-              clonada com IA e publicação automática no TikTok.
+              Depois dos {TRIAL_DAYS} dias, assine pra continuar gerando roteiros, imagens, narração e vídeo sem
+              limite — não existe outro plano gratuito.
             </div>
             <SiteBtn href="/cadastro" large className="mt-8">
-              Quero meus 9 dias grátis
+              Quero meus {TRIAL_DAYS} dias grátis
             </SiteBtn>
           </div>
         </div>

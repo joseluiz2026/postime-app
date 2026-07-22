@@ -3,8 +3,8 @@ import { Eyebrow, SectionHead, SiteBtn } from "./ui";
 const STEPS = [
   { n: 1, title: "Escolha a fonte", desc: "Suba um PDF, cole um texto, jogue um link, ou digite um tema. A IA também pode pesquisar por você." },
   { n: 2, title: "Roteiros em segundos", desc: "O POSTime extrai os temas e escreve os roteiros automaticamente. Edite se quiser, ou deixe como está." },
-  { n: 3, title: "Grave, envie ou narre", desc: "Grave sua voz, envie um áudio pronto, ou clone sua voz de verdade no plano Pro." },
-  { n: 4, title: "Estilo e publicação", desc: "Escolha entre 6 estilos visuais, confirme e publique direto no TikTok." },
+  { n: 3, title: "Grave, envie ou narre", desc: "Grave sua voz, envie um áudio pronto, ou clone sua voz de verdade com IA (em breve)." },
+  { n: 4, title: "Estilo e download", desc: "Escolha entre 6 estilos visuais, confirme e baixe o vídeo pronto pra postar." },
 ];
 
 export function ComoFunciona() {

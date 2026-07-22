@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AuthCard, AuthField, type AuthResult } from "@/components/site/AuthCard";
+import { TRIAL_DAYS } from "@/lib/plan";
 import { createClient } from "@/lib/supabase/client";
 import { translateAuthError } from "@/lib/supabase/errors";
 
@@ -37,7 +38,7 @@ export default function CadastroPage() {
   return (
     <AuthCard
       title="Crie sua conta grátis"
-      subtitle="9 dias grátis, sem cartão de crédito. Nome, e-mail e senha — só isso."
+      subtitle={`${TRIAL_DAYS} dias grátis, sem cartão de crédito. Nome, e-mail e senha — só isso.`}
       submitLabel="Criar minha conta"
       onSubmit={handleSubmit}
       footer={

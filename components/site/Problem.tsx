@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { Icon } from "@/lib/icons";
+import { TRIAL_DAYS } from "@/lib/plan";
 import { Eyebrow, SectionHead, SiteBtn } from "./ui";
 
 const CARDS = [
@@ -59,7 +60,7 @@ export function Problem() {
 
         <div className="mt-10 flex items-center gap-4 flex-wrap">
           <SiteBtn href="/cadastro">Resolver isso agora</SiteBtn>
-          <p className="text-sm text-[var(--text-3)]">9 dias grátis, sem cartão.</p>
+          <p className="text-sm text-[var(--text-3)]">{TRIAL_DAYS} dias grátis, sem cartão.</p>
         </div>
       </div>
     </section>
