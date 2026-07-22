@@ -50,3 +50,18 @@ export function allowedDurationsFor(phase: AccessPhase, isSubscribed: boolean): 
  * how a completed checkout turns into a public.subscriptions row.
  */
 export const KIWIFY_CHECKOUT_URL = "https://pay.kiwify.com.br/HRodY1I";
+
+/**
+ * The webhook matches a payment back to a POSTime account purely by email — there's
+ * no other identifier passed through Kiwify today. Pre-filling (Kiwify supports
+ * ?email=&name=) makes it much less likely someone pays with a different email than
+ * their POSTime account, which would otherwise leave their payment unmatched (see
+ * kiwify_unmatched_events in the webhook route).
+ */
+export function getKiwifyCheckoutUrl(email?: string, name?: string): string {
+  const params = new URLSearchParams();
+  if (email) params.set("email", email);
+  if (name) params.set("name", name);
+  const query = params.toString();
+  return query ? `${KIWIFY_CHECKOUT_URL}?${query}` : KIWIFY_CHECKOUT_URL;
+}

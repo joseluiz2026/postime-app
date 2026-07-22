@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendOwnerAlert } from "@/lib/alert-email";
 
 export const runtime = "nodejs";
 
@@ -41,8 +42,11 @@ export async function POST(request: Request) {
   const isLate = /late|atrasad/.test(rawEvent);
   const isRevoked = /recusad|refused|reembols|refund|chargeback|cancel/.test(rawEvent);
 
+  const supabase = createAdminClient();
+
   if (!email) {
     console.warn("[/api/webhooks/kiwify] no email found in payload, ignoring");
+    await supabase.from("kiwify_unmatched_events").insert({ email: null, raw_payload: body });
     return NextResponse.json({ ok: true, ignored: "no_email" });
   }
 
@@ -53,7 +57,6 @@ export async function POST(request: Request) {
 
   const status = isApproved ? "active" : isLate ? "late" : "canceled";
 
-  const supabase = createAdminClient();
   const listRes = await fetch(
     `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/admin/users?email=${encodeURIComponent(email)}`,
     {
@@ -73,6 +76,14 @@ export async function POST(request: Request) {
   );
   if (!user) {
     console.warn(`[/api/webhooks/kiwify] no POSTime account for ${email} — payment made with a different email?`);
+    // Kept for self-service reconciliation — see app/api/account/link-payment.
+    await supabase
+      .from("kiwify_unmatched_events")
+      .insert({ email, status, kiwify_order_id: orderId, raw_payload: body });
+    await sendOwnerAlert(
+      "POSTime: pagamento Kiwify sem conta correspondente",
+      `Um pagamento aprovado na Kiwify (pedido ${orderId ?? "sem id"}) usou o e-mail ${email}, que não bate com nenhuma conta do POSTime.\n\nO cliente pode resolver sozinho em "Já paguei mas minha conta não foi liberada" (no modal de assinatura), informando esse mesmo e-mail.`,
+    );
     return NextResponse.json({ ok: true, ignored: "no_matching_account" });
   }
 
