@@ -6,6 +6,7 @@ import { ThemeSwitcher } from "@/components/app/ThemeSwitcher";
 import { ThemeProvider } from "@/lib/theme-context";
 import { createClient } from "@/lib/supabase/server";
 import { WizardProvider } from "@/lib/wizard-context";
+import { DistributionProvider } from "@/lib/distribution-context";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -20,6 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <ThemeProvider>
     <WizardProvider initialName={initialName} userEmail={user.email ?? ""} userId={user.id}>
+    <DistributionProvider>
       <div className="max-w-[880px] mx-auto px-8 pt-10 pb-24">
         <div className="bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] border-b-[2.5px] border-b-[var(--gold)] rounded-[18px] px-8 pt-9 pb-[30px] mb-8">
           <div className="flex justify-between items-start gap-8 flex-wrap">
@@ -60,6 +62,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {children}
       </div>
       <WizardModals />
+    </DistributionProvider>
     </WizardProvider>
     </ThemeProvider>
   );

@@ -3,19 +3,21 @@
 import { useState } from "react";
 import { Icon } from "@/lib/icons";
 import { useWizard } from "@/lib/wizard-context";
+import { useDistribution } from "@/lib/distribution-context";
 import { Btn, ModalShell } from "../ui";
 
 type Step = "intro" | "connecting" | "done";
 
 export function TiktokModal() {
   const wizard = useWizard();
+  const distribution = useDistribution();
   const open = wizard.modal.type === "tiktok";
   const [step, setStep] = useState<Step>("intro");
   const [prevOpen, setPrevOpen] = useState(false);
 
   if (open !== prevOpen) {
     setPrevOpen(open);
-    if (open) setStep(wizard.tiktokConnected ? "done" : "intro");
+    if (open) setStep(distribution.tiktokConnected ? "done" : "intro");
   }
 
   return (
@@ -41,7 +43,7 @@ export function TiktokModal() {
             onClick={() => {
               setStep("connecting");
               setTimeout(() => {
-                wizard.connectTiktok("@joseluiz.cruz");
+                distribution.connectTiktok("@joseluiz.cruz");
                 setStep("done");
               }, 1600);
             }}
@@ -60,7 +62,7 @@ export function TiktokModal() {
         <div className="text-center">
           <Icon name="circle-check" className="text-[40px] text-[var(--teal)] block mb-3" />
           <p className="text-[var(--text-2)] text-[13.5px] leading-relaxed mb-6">
-            Conta {wizard.tiktokHandle} conectada! Agora cada vídeo pronto tem um botão &quot;Publicar&quot; que abre
+            Conta {distribution.tiktokHandle} conectada! Agora cada vídeo pronto tem um botão &quot;Publicar&quot; que abre
             direto no TikTok pra você confirmar.
           </p>
           <Btn variant="primary" onClick={wizard.closeModal}>

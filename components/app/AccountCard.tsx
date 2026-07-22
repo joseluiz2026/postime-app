@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Icon } from "@/lib/icons";
 import { useWizard } from "@/lib/wizard-context";
 
@@ -63,8 +64,13 @@ export function AccountCard() {
         </div>
       )}
       <div className="flex flex-col gap-0.5">
+        <Link
+          href="/app/provedores"
+          className="flex items-center gap-2 bg-transparent border-none text-[var(--text-2)] text-xs font-sans px-1.5 py-2 rounded-lg cursor-pointer text-left w-full transition-all hover:bg-[var(--bg-2)] hover:text-[var(--text-1)] [&_svg]:text-[var(--text-3)] hover:[&_svg]:text-[var(--gold)]"
+        >
+          <Icon name="key" className="text-sm shrink-0" /> Central de Provedores de IA
+        </Link>
         {[
-          { icon: "key", label: "Minha chave de API", type: "apikey" as const },
           { icon: "lock", label: "Trocar senha", type: "password" as const },
           { icon: "alert-triangle", label: "Relatar problema", type: "report" as const },
           { icon: "help", label: "FAQ", type: "faq" as const },

@@ -26,6 +26,7 @@ export async function POST(request: Request) {
     .from("user_api_keys")
     .select("provider, encrypted_key, iv, auth_tag")
     .eq("user_id", user.id)
+    .eq("category", "texto")
     .maybeSingle();
 
   try {

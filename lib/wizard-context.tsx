@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import type { LlmProvider } from "./ai/generate-roteiros";
+import type { MusicMood } from "./audio/moods";
 import { FREE_LIFETIME_LIMIT, type Plan } from "./plan";
 import { createClient } from "./supabase/client";
 
@@ -26,12 +27,14 @@ export type StyleName =
 export type Duration = "15s" | "30s" | "60s";
 
 export type OwnImage = { name: string; url: string };
-export type Roteiro = { meta: string; text: string };
+export type Roteiro = { meta: string; text: string; mood?: MusicMood };
+// Core's video output is deliberately blind to distribution (see lib/distribution-context.tsx) —
+// it exposes an id so a channel-connect module can reference "which video", nothing about
+// publish state itself.
 export type Video = {
+  id: string;
   title: string;
   style?: string;
-  publishing?: boolean;
-  published?: boolean;
   imageUrl?: string;
   imageCredit?: string;
   videoUrl?: string;
@@ -47,7 +50,7 @@ export type ModalId =
   | "tiktok"
   | "autoProgress";
 
-export type AccountModalType = "password" | "report" | "faq" | "support" | "apikey";
+export type AccountModalType = "password" | "report" | "faq" | "support";
 
 type ModalState =
   | { type: null }
@@ -74,8 +77,6 @@ type WizardState = {
   plan: Plan;
   voiceCloned: boolean;
   selectedVoiceName: string;
-  tiktokConnected: boolean;
-  tiktokHandle: string;
 
   // AI usage / own key
   lifetimeGenerated: number;
@@ -164,10 +165,7 @@ type WizardContextValue = WizardState & {
 
   clickAutoGenerate: () => void;
 
-  publishVideo: (idx: number) => void;
-
   connectEleven: (name: string) => void;
-  connectTiktok: (handle: string) => void;
   saveWhatsapp: () => void;
 
   openModal: (m: ModalState) => void;
@@ -192,8 +190,6 @@ export function WizardProvider({
   const [plan, setPlanState] = useState<Plan>("free");
   const [voiceCloned, setVoiceCloned] = useState(false);
   const [selectedVoiceName, setSelectedVoiceName] = useState("");
-  const [tiktokConnected, setTiktokConnected] = useState(false);
-  const [tiktokHandle, setTiktokHandle] = useState("@seu.usuario");
 
   const [lifetimeGenerated, setLifetimeGenerated] = useState(0);
   const [hasOwnKey, setHasOwnKey] = useState(false);
@@ -240,7 +236,7 @@ export function WizardProvider({
     const supabase = createClient();
     const [profileRes, keyRes] = await Promise.all([
       supabase.from("profiles").select("lifetime_generations").maybeSingle(),
-      supabase.from("user_api_keys").select("provider, created_at").maybeSingle(),
+      supabase.from("user_api_keys").select("provider, created_at").eq("category", "texto").maybeSingle(),
     ]);
     setLifetimeGenerated(profileRes.data?.lifetime_generations ?? 0);
     setHasOwnKey(!!keyRes.data);
@@ -259,7 +255,7 @@ export function WizardProvider({
         const res = await fetch("/api/account/api-key", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ provider, apiKey }),
+          body: JSON.stringify({ category: "texto", provider, apiKey }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -285,7 +281,11 @@ export function WizardProvider({
   const removeOwnKey = useCallback(async () => {
     setSavingKey(true);
     try {
-      await fetch("/api/account/api-key", { method: "DELETE" });
+      await fetch("/api/account/api-key", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: "texto" }),
+      });
       await refreshUsage();
     } finally {
       setSavingKey(false);
@@ -371,8 +371,8 @@ export function WizardProvider({
   }, []);
 
   const applyVideos = useCallback(
-    (next: Video[], status: string) => {
-      setVideos(next);
+    (next: Omit<Video, "id">[], status: string) => {
+      setVideos(next.map((v) => ({ ...v, id: crypto.randomUUID() })));
       setVideoCountStatus(status);
       if (next.length > 0 && !whatsappPromptShown.current) {
         whatsappPromptShown.current = true;
@@ -521,10 +521,10 @@ export function WizardProvider({
         return false;
       }
       const images: ({ url: string; photographer: string } | null)[] = data.images;
-      const built: Video[] = await Promise.all(
-        indices.map(async (i, pos): Promise<Video> => {
+      const built: Omit<Video, "id">[] = await Promise.all(
+        indices.map(async (i, pos): Promise<Omit<Video, "id">> => {
           const image = images[pos];
-          const base: Video = {
+          const base: Omit<Video, "id"> = {
             title: `Tema ${String(i + 1).padStart(2, "0")} · ${selectedStyle}`,
             style: selectedStyle,
             imageUrl: image?.url,
@@ -618,28 +618,9 @@ export function WizardProvider({
     closeModal,
   ]);
 
-  const publishVideo = useCallback(
-    (idx: number) => {
-      if (!tiktokConnected) {
-        openModal({ type: "tiktok" });
-        return;
-      }
-      setVideos((prev) => prev.map((v, i) => (i === idx ? { ...v, publishing: true } : v)));
-      setTimeout(() => {
-        setVideos((prev) => prev.map((v, i) => (i === idx ? { ...v, publishing: false, published: true } : v)));
-      }, 1400);
-    },
-    [tiktokConnected, openModal],
-  );
-
   const connectEleven = useCallback((name: string) => {
     setVoiceCloned(true);
     setSelectedVoiceName(name);
-  }, []);
-
-  const connectTiktok = useCallback((handle: string) => {
-    setTiktokConnected(true);
-    setTiktokHandle(handle);
   }, []);
 
   const saveWhatsapp = useCallback(() => {
@@ -671,8 +652,6 @@ export function WizardProvider({
       plan,
       voiceCloned,
       selectedVoiceName,
-      tiktokConnected,
-      tiktokHandle,
       lifetimeGenerated,
       hasOwnKey,
       ownKeyProvider,
@@ -736,9 +715,7 @@ export function WizardProvider({
       setSelectedStyle,
       confirmBuild,
       clickAutoGenerate,
-      publishVideo,
       connectEleven,
-      connectTiktok,
       saveWhatsapp,
       openModal,
       closeModal,
@@ -748,8 +725,6 @@ export function WizardProvider({
       plan,
       voiceCloned,
       selectedVoiceName,
-      tiktokConnected,
-      tiktokHandle,
       lifetimeGenerated,
       hasOwnKey,
       ownKeyProvider,
@@ -804,9 +779,7 @@ export function WizardProvider({
       toggleSelectedForVideo,
       confirmBuild,
       clickAutoGenerate,
-      publishVideo,
       connectEleven,
-      connectTiktok,
       saveWhatsapp,
       openModal,
       closeModal,

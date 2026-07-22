@@ -106,7 +106,7 @@ export default function RoteirosPage() {
             <Icon name="lock" /> Suas {FREE_LIFETIME_LIMIT} gerações grátis acabaram.{" "}
             <button
               className="text-[var(--gold)] underline-offset-2 hover:underline"
-              onClick={() => wizard.openModal({ type: "account", accountType: "apikey" })}
+              onClick={() => router.push("/app/provedores")}
             >
               Adicionar minha chave de API
             </button>{" "}
@@ -145,8 +145,8 @@ export default function RoteirosPage() {
       </div>
 
       <div className="flex items-center gap-2.5 mt-2 flex-wrap">
-        <Btn onClick={() => wizard.openModal({ type: "account", accountType: "apikey" })}>
-          <Icon name="key" /> Minha chave de API
+        <Btn onClick={() => router.push("/app/provedores")}>
+          <Icon name="key" /> Central de Provedores de IA
         </Btn>
         {wizard.hasOwnKey && (
           <span className="text-[13px] text-[var(--text-2)]">

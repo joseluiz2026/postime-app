@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { FREE_LIFETIME_LIMIT } from "@/lib/plan";
 import { useWizard } from "@/lib/wizard-context";
@@ -7,6 +8,7 @@ import { Btn, ModalShell } from "../ui";
 
 export function UpgradeModal() {
   const wizard = useWizard();
+  const router = useRouter();
   const open = wizard.modal.type === "upgrade";
   const auto = open && wizard.modal.type === "upgrade" ? wizard.modal.auto : false;
 
@@ -21,7 +23,10 @@ export function UpgradeModal() {
           <Btn
             variant="primary"
             className="w-full justify-center"
-            onClick={() => wizard.openModal({ type: "account", accountType: "apikey" })}
+            onClick={() => {
+              wizard.closeModal();
+              router.push("/app/provedores");
+            }}
           >
             <Icon name="key" /> Adicionar minha chave de API
           </Btn>
@@ -37,7 +42,7 @@ export function UpgradeModal() {
     <ModalShell open={open} onClose={wizard.closeModal} icon="rocket" title="Torne-se Pro">
       <p className="text-[var(--text-2)] text-[13.5px] leading-relaxed mb-6">
         Desbloqueie recursos exclusivos com o plano Pro. Para gerar roteiros sem limite hoje, conecte sua própria
-        chave de API em &quot;Minha chave de API&quot;.
+        chave de API na &quot;Central de Provedores de IA&quot;.
       </p>
       <ul className="list-none p-0 mb-6 flex flex-col gap-3">
         {[
