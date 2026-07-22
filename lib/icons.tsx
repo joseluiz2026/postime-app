@@ -16,6 +16,7 @@ const ICON_PATHS: Record<string, string> = {
   download: '<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/><path d="M7 11l5 5l5-5"/><path d="M12 4v12"/>',
   edit: '<path d="M4 20l4-1l10-10l-3-3l-10 10z"/><path d="M13 6l3 3"/>',
   eye: '<path d="M2 12s3.5-7 10-7s10 7 10 7s-3.5 7-10 7s-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+  "eye-off": '<path d="M3 3l18 18"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68M6.61 6.61C3.35 8.36 2 11 2 11s3.5 7 10 7a9.53 9.53 0 0 0 5-1.5"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>',
   "file-music": '<path d="M6 3h8l4 4v13a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1z"/><path d="M10 17a2 2 0 1 0 0-4a2 2 0 0 0 0 4z"/><path d="M12 13v-4l3-1v4"/>',
   "file-text": '<path d="M6 3h8l4 4v13a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1z"/><path d="M9 13h6"/><path d="M9 17h6"/>',
   headphones: '<path d="M4 13a8 8 0 0 1 16 0"/><path d="M4 13v5a2 2 0 0 0 2 2h1v-6h-3z"/><path d="M20 13v5a2 2 0 0 1-2 2h-1v-6h3z"/>',

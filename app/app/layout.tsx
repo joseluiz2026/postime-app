@@ -32,7 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <DistributionProvider>
       <div className="max-w-[880px] mx-auto px-8 pt-10 pb-24">
         <div className="bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] border-b-[2.5px] border-b-[var(--gold)] rounded-[18px] px-8 pt-9 pb-[30px] mb-8">
-          <div className="flex justify-between items-start gap-8 flex-wrap">
+          <div className="flex justify-between items-start gap-8 flex-wrap max-[640px]:justify-center">
             <div className="flex-1 min-w-[230px]">
               <p className="font-mono text-[11px] tracking-[0.14em] text-[var(--gold)] uppercase mb-3">
                 O seu motor de conteúdos virais para TikTok

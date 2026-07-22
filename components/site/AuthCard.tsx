@@ -75,15 +75,32 @@ export function AuthCard({
 
 export function AuthField({
   label,
+  type,
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  const [visible, setVisible] = useState(false);
+  const isPassword = type === "password";
+
   return (
     <label className="block">
       <span className="block text-xs font-medium text-[var(--text-2)] mb-2">{label}</span>
-      <input
-        {...props}
-        className="w-full bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] rounded-[9px] text-[var(--text-1)] font-sans text-sm px-[14px] py-[11px] outline-none transition-all hover:border-[var(--line-strong)] focus:border-[var(--gold)] focus:bg-[var(--bg-3)] placeholder:text-[var(--text-3)]"
-      />
+      <div className="relative">
+        <input
+          {...props}
+          type={isPassword ? (visible ? "text" : "password") : type}
+          className={`w-full bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] rounded-[9px] text-[var(--text-1)] font-sans text-sm px-[14px] py-[11px] outline-none transition-all hover:border-[var(--line-strong)] focus:border-[var(--gold)] focus:bg-[var(--bg-3)] placeholder:text-[var(--text-3)] ${isPassword ? "pr-11" : ""}`}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            aria-label={visible ? "Ocultar senha" : "Mostrar senha"}
+            onClick={() => setVisible((v) => !v)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 bg-transparent border-none p-0 text-[var(--text-3)] cursor-pointer flex items-center transition-colors hover:text-[var(--gold)]"
+          >
+            <Icon name={visible ? "eye-off" : "eye"} />
+          </button>
+        )}
+      </div>
     </label>
   );
 }
