@@ -13,7 +13,6 @@ import {
 } from "react";
 import type { LlmProvider } from "./ai/generate-roteiros";
 import type { MusicMood } from "./audio/moods";
-import { FREE_LIFETIME_LIMIT, type Plan } from "./plan";
 import { createClient } from "./supabase/client";
 
 export type SourceType = "ebook" | "texto" | "link" | "youtube" | "websearch";
@@ -54,7 +53,7 @@ export type AccountModalType = "password" | "report" | "faq" | "support";
 
 type ModalState =
   | { type: null }
-  | { type: "upgrade"; auto?: boolean }
+  | { type: "upgrade" }
   | { type: "eleven" }
   | { type: "account"; accountType: AccountModalType }
   | { type: "whatsapp" }
@@ -74,12 +73,14 @@ function normalizeForMatch(str: string): string {
 type WizardState = {
   // account
   accountName: string;
-  plan: Plan;
+  // 7-day unrestricted trial from signup is the only free access path — see lib/plan.ts.
+  // No plan toggle, no per-generation counter: trialActive is derived from account age.
+  trialActive: boolean;
+  trialDaysLeft: number;
   voiceCloned: boolean;
   selectedVoiceName: string;
 
   // AI usage / own key
-  lifetimeGenerated: number;
   hasOwnKey: boolean;
   ownKeyProvider: LlmProvider | null;
   savingKey: boolean;
@@ -142,9 +143,7 @@ type WizardContextValue = WizardState & {
   setQty: (v: number) => void;
   qtyMax: () => number;
 
-  setPlan: (p: Plan) => void;
-  requestPro: () => void;
-  confirmUpgrade: () => void;
+  openUpgradeModal: () => void;
 
   refreshUsage: () => Promise<void>;
   saveOwnKey: (provider: LlmProvider, apiKey: string) => Promise<boolean>;
@@ -179,19 +178,27 @@ export function WizardProvider({
   initialName,
   userEmail,
   userId,
+  trialEndsAt,
 }: {
   children: ReactNode;
   initialName: string;
   userEmail: string;
   userId: string;
+  /** ISO timestamp — signup time + TRIAL_DAYS, computed server-side in app/app/layout.tsx from the real auth user's created_at. */
+  trialEndsAt: string;
 }) {
   const router = useRouter();
   const [accountName, setAccountNameState] = useState(initialName);
-  const [plan, setPlanState] = useState<Plan>("free");
   const [voiceCloned, setVoiceCloned] = useState(false);
   const [selectedVoiceName, setSelectedVoiceName] = useState("");
 
-  const [lifetimeGenerated, setLifetimeGenerated] = useState(0);
+  const trialEndsAtMs = new Date(trialEndsAt).getTime();
+  // Date.now() can't be read directly during render (impure) — a lazy useState
+  // initializer is the sanctioned escape hatch, evaluated once at mount.
+  const [now] = useState(() => Date.now());
+  const trialActive = now < trialEndsAtMs;
+  const trialDaysLeft = Math.max(0, Math.ceil((trialEndsAtMs - now) / 86_400_000));
+
   const [hasOwnKey, setHasOwnKey] = useState(false);
   const [ownKeyProvider, setOwnKeyProvider] = useState<LlmProvider | null>(null);
   const [savingKey, setSavingKey] = useState(false);
@@ -234,13 +241,13 @@ export function WizardProvider({
 
   const refreshUsage = useCallback(async () => {
     const supabase = createClient();
-    const [profileRes, keyRes] = await Promise.all([
-      supabase.from("profiles").select("lifetime_generations").maybeSingle(),
-      supabase.from("user_api_keys").select("provider, created_at").eq("category", "texto").maybeSingle(),
-    ]);
-    setLifetimeGenerated(profileRes.data?.lifetime_generations ?? 0);
-    setHasOwnKey(!!keyRes.data);
-    setOwnKeyProvider((keyRes.data?.provider as LlmProvider | undefined) ?? null);
+    const { data } = await supabase
+      .from("user_api_keys")
+      .select("provider, created_at")
+      .eq("category", "texto")
+      .maybeSingle();
+    setHasOwnKey(!!data);
+    setOwnKeyProvider((data?.provider as LlmProvider | undefined) ?? null);
   }, []);
 
   useEffect(() => {
@@ -328,39 +335,19 @@ export function WizardProvider({
     });
   }, []);
 
-  const qtyMax = useCallback(
-    () => (hasOwnKey ? 20 : Math.max(0, FREE_LIFETIME_LIMIT - lifetimeGenerated)),
-    [hasOwnKey, lifetimeGenerated],
-  );
+  const qtyMax = useCallback(() => 20, []);
 
   const setQty = useCallback(
     (v: number) => {
       const max = qtyMax();
-      const min = max > 0 ? 1 : 0;
-      setQtyState(Math.min(Math.max(max, 0), Math.max(min, v)));
+      setQtyState(Math.min(max, Math.max(1, v)));
     },
     [qtyMax],
   );
 
-  const requestPro = useCallback(() => {
+  const openUpgradeModal = useCallback(() => {
     openModal({ type: "upgrade" });
   }, [openModal]);
-
-  const setPlan = useCallback(
-    (p: Plan) => {
-      if (p === "pro") {
-        requestPro();
-        return;
-      }
-      setPlanState(p);
-    },
-    [requestPro],
-  );
-
-  const confirmUpgrade = useCallback(() => {
-    setPlanState("pro");
-    closeModal();
-  }, [closeModal]);
 
   const resetVideoTracking = useCallback((n: number) => {
     setScriptIndex(0);
@@ -393,10 +380,6 @@ export function WizardProvider({
 
   const clickGerar = useCallback(async () => {
     const n = qty || 1;
-    if (!hasOwnKey && lifetimeGenerated + n > FREE_LIFETIME_LIMIT) {
-      openModal({ type: "upgrade", auto: true });
-      return;
-    }
     setGenerating(true);
     setGenerateError(null);
     try {
@@ -407,9 +390,8 @@ export function WizardProvider({
       });
       const data = await res.json();
       if (!res.ok) {
-        if (data.error === "limit_reached") {
-          setLifetimeGenerated(FREE_LIFETIME_LIMIT);
-          openModal({ type: "upgrade", auto: true });
+        if (data.error === "trial_expired") {
+          openModal({ type: "upgrade" });
         } else if (data.error === "invalid_key") {
           setGenerateError("Sua chave de API parece inválida. Verifique em Minha conta.");
         } else {
@@ -419,22 +401,15 @@ export function WizardProvider({
       }
       setRoteiros(data.roteiros);
       resetVideoTracking(data.roteiros.length);
-      if (data.mode === "free" && typeof data.remaining === "number") {
-        setLifetimeGenerated(FREE_LIFETIME_LIMIT - data.remaining);
-      }
     } catch {
       setGenerateError("Falha de conexão. Tente novamente.");
     } finally {
       setGenerating(false);
     }
-  }, [qty, hasOwnKey, lifetimeGenerated, duration, sourceType, requestSourceText, openModal, resetVideoTracking]);
+  }, [qty, duration, sourceType, requestSourceText, openModal, resetVideoTracking]);
 
   const regenerateRoteiro = useCallback(
     async (idx: number) => {
-      if (!hasOwnKey && lifetimeGenerated + 1 > FREE_LIFETIME_LIMIT) {
-        openModal({ type: "upgrade", auto: true });
-        return;
-      }
       setRegeneratingIndex(idx);
       setGenerateError(null);
       try {
@@ -445,9 +420,8 @@ export function WizardProvider({
         });
         const data = await res.json();
         if (!res.ok) {
-          if (data.error === "limit_reached") {
-            setLifetimeGenerated(FREE_LIFETIME_LIMIT);
-            openModal({ type: "upgrade", auto: true });
+          if (data.error === "trial_expired") {
+            openModal({ type: "upgrade" });
           } else {
             setGenerateError("Não foi possível regenerar agora.");
           }
@@ -455,16 +429,13 @@ export function WizardProvider({
         }
         const [newRoteiro] = data.roteiros;
         if (newRoteiro) setRoteiros((prev) => prev.map((r, i) => (i === idx ? newRoteiro : r)));
-        if (data.mode === "free" && typeof data.remaining === "number") {
-          setLifetimeGenerated(FREE_LIFETIME_LIMIT - data.remaining);
-        }
       } catch {
         setGenerateError("Falha de conexão. Tente novamente.");
       } finally {
         setRegeneratingIndex(null);
       }
     },
-    [hasOwnKey, lifetimeGenerated, duration, sourceType, requestSourceText, openModal],
+    [duration, sourceType, requestSourceText, openModal],
   );
 
   const uploadRecording = useCallback(
@@ -565,11 +536,11 @@ export function WizardProvider({
   }, [selectedForVideo, selectedStyle, sourceLabel, applyVideos, roteiros, audioPaths]);
 
   const clickAutoGenerate = useCallback(() => {
-    if (!hasOwnKey && lifetimeGenerated >= FREE_LIFETIME_LIMIT) {
-      openModal({ type: "upgrade", auto: true });
+    if (!trialActive) {
+      openModal({ type: "upgrade" });
       return;
     }
-    const n = hasOwnKey ? 3 : Math.max(1, Math.min(3, FREE_LIFETIME_LIMIT - lifetimeGenerated));
+    const n = 3;
     openModal({
       type: "autoProgress",
       onDone: async () => {
@@ -583,7 +554,11 @@ export function WizardProvider({
           });
           const data = await res.json();
           if (!res.ok) {
-            setGenerateError("Não foi possível gerar agora.");
+            if (data.error === "trial_expired") {
+              openModal({ type: "upgrade" });
+            } else {
+              setGenerateError("Não foi possível gerar agora.");
+            }
             return;
           }
           setRoteiros(data.roteiros);
@@ -594,9 +569,6 @@ export function WizardProvider({
             data.roteiros.map((_: Roteiro, i: number) => ({ title: `Tema ${String(i + 1).padStart(2, "0")}` })),
             `${data.roteiros.length} vídeos gerados hoje · fonte: ${label}`,
           );
-          if (data.mode === "free" && typeof data.remaining === "number") {
-            setLifetimeGenerated(FREE_LIFETIME_LIMIT - data.remaining);
-          }
         } catch {
           setGenerateError("Falha de conexão. Tente novamente.");
         } finally {
@@ -605,18 +577,7 @@ export function WizardProvider({
         }
       },
     });
-  }, [
-    hasOwnKey,
-    lifetimeGenerated,
-    duration,
-    sourceType,
-    requestSourceText,
-    openModal,
-    resetVideoTracking,
-    sourceLabel,
-    applyVideos,
-    closeModal,
-  ]);
+  }, [trialActive, duration, sourceType, requestSourceText, openModal, resetVideoTracking, sourceLabel, applyVideos, closeModal]);
 
   const connectEleven = useCallback((name: string) => {
     setVoiceCloned(true);
@@ -649,10 +610,10 @@ export function WizardProvider({
   const value = useMemo<WizardContextValue>(
     () => ({
       accountName,
-      plan,
+      trialActive,
+      trialDaysLeft,
       voiceCloned,
       selectedVoiceName,
-      lifetimeGenerated,
       hasOwnKey,
       ownKeyProvider,
       savingKey,
@@ -700,9 +661,7 @@ export function WizardProvider({
       setDuration,
       setQty,
       qtyMax,
-      setPlan,
-      requestPro,
-      confirmUpgrade,
+      openUpgradeModal,
       refreshUsage,
       saveOwnKey,
       removeOwnKey,
@@ -722,10 +681,10 @@ export function WizardProvider({
     }),
     [
       accountName,
-      plan,
+      trialActive,
+      trialDaysLeft,
       voiceCloned,
       selectedVoiceName,
-      lifetimeGenerated,
       hasOwnKey,
       ownKeyProvider,
       savingKey,
@@ -766,9 +725,7 @@ export function WizardProvider({
       matchedOwnImageIndices,
       setQty,
       qtyMax,
-      setPlan,
-      requestPro,
-      confirmUpgrade,
+      openUpgradeModal,
       refreshUsage,
       saveOwnKey,
       removeOwnKey,

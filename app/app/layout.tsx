@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/lib/theme-context";
 import { createClient } from "@/lib/supabase/server";
 import { WizardProvider } from "@/lib/wizard-context";
 import { DistributionProvider } from "@/lib/distribution-context";
+import { TRIAL_DAYS } from "@/lib/plan";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -17,10 +18,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect("/login");
 
   const initialName = (user.user_metadata?.full_name as string | undefined)?.trim() || user.email || "Você";
+  const trialEndsAt = new Date(user.created_at);
+  trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DAYS);
 
   return (
     <ThemeProvider>
-    <WizardProvider initialName={initialName} userEmail={user.email ?? ""} userId={user.id}>
+    <WizardProvider
+      initialName={initialName}
+      userEmail={user.email ?? ""}
+      userId={user.id}
+      trialEndsAt={trialEndsAt.toISOString()}
+    >
     <DistributionProvider>
       <div className="max-w-[880px] mx-auto px-8 pt-10 pb-24">
         <div className="bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] border-b-[2.5px] border-b-[var(--gold)] rounded-[18px] px-8 pt-9 pb-[30px] mb-8">

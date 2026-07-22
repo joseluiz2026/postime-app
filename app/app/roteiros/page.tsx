@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/lib/icons";
-import { FREE_LIFETIME_LIMIT } from "@/lib/plan";
+import { TRIAL_DAYS } from "@/lib/plan";
 import { PROVIDER_LABELS } from "@/lib/ai/generate-roteiros";
 import { useWizard } from "@/lib/wizard-context";
 import { Btn, Card, HelpTip, IconBtn, Pill, TextArea } from "@/components/app/ui";
@@ -14,29 +14,25 @@ export default function RoteirosPage() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
 
-  const remaining = Math.max(0, FREE_LIFETIME_LIMIT - wizard.lifetimeGenerated);
-
   return (
     <Card>
       <div className="flex justify-between items-center flex-wrap gap-3">
         <h3 className="font-sans text-base font-semibold m-0 text-[var(--text-1)]">Roteiros gerados</h3>
         <div className="flex items-center gap-2">
-          <span className="text-[13px] text-[var(--text-2)]">Plano:</span>
-          <Pill selected={wizard.plan === "free"} onClick={() => wizard.setPlan("free")}>
-            Free
-          </Pill>
-          <Pill selected={wizard.plan === "pro"} onClick={() => wizard.setPlan("pro")}>
-            Pro
-          </Pill>
+          <span
+            className={`font-mono text-xs px-3 py-1.5 rounded-full border-[0.5px] ${
+              wizard.trialActive
+                ? "text-[var(--teal)] bg-[color-mix(in_srgb,var(--teal)_8%,transparent)] border-[color-mix(in_srgb,var(--teal)_25%,transparent)]"
+                : "text-[var(--gold)] bg-[color-mix(in_srgb,var(--gold)_10%,transparent)] border-[color-mix(in_srgb,var(--gold)_30%,transparent)]"
+            }`}
+          >
+            {wizard.trialActive
+              ? `Teste grátis · ${wizard.trialDaysLeft} ${wizard.trialDaysLeft === 1 ? "dia restante" : "dias restantes"}`
+              : "Teste grátis encerrado"}
+          </span>
           <HelpTip
-            label="Diferença entre Free e chave própria"
-            text={
-              <>
-                <strong>Free:</strong> {FREE_LIFETIME_LIMIT} gerações no total (não é por dia). Para gerar sem
-                limite, conecte sua própria chave de API (OpenAI, Gemini ou Anthropic) em &quot;Minha chave de
-                API&quot;.
-              </>
-            }
+            label="Como funciona o teste grátis"
+            text={`${TRIAL_DAYS} dias de uso irrestrito a partir do cadastro, sem limite de gerações. Depois disso, é preciso de uma assinatura ativa para continuar — não existe outro plano gratuito, mesmo com chave própria conectada.`}
           />
         </div>
       </div>
@@ -68,7 +64,7 @@ export default function RoteirosPage() {
             Vídeos por vez
             <HelpTip
               label="O que significa vídeos por vez"
-              text='Quantos roteiros o botão "Gerar" cria de uma vez. Sem chave própria, isso é limitado ao seu saldo restante do plano Free.'
+              text='Quantos roteiros o botão "Gerar" cria de uma vez.'
             />
           </span>
           <div className="flex items-center gap-2.5">
@@ -85,7 +81,7 @@ export default function RoteirosPage() {
               variant="primary"
               className="ml-2.5"
               onClick={wizard.clickGerar}
-              disabled={wizard.generating || (!wizard.hasOwnKey && wizard.qtyMax() === 0)}
+              disabled={wizard.generating || !wizard.trialActive}
             >
               <Icon name="loader-2" spin={wizard.generating} className={wizard.generating ? "" : "hidden"} />
               <Icon name="bolt" className={wizard.generating ? "hidden" : ""} />
@@ -96,24 +92,23 @@ export default function RoteirosPage() {
       </div>
 
       <p className="text-[13px] text-[var(--text-2)] mt-3 leading-relaxed">
-        {wizard.hasOwnKey ? (
+        {!wizard.trialActive ? (
           <>
-            <Icon name="infinity" /> Chave própria conectada ({PROVIDER_LABELS[wizard.ownKeyProvider!]}): geração
-            sem limite.
-          </>
-        ) : remaining === 0 ? (
-          <>
-            <Icon name="lock" /> Suas {FREE_LIFETIME_LIMIT} gerações grátis acabaram.{" "}
+            <Icon name="lock" /> Seu teste grátis acabou.{" "}
             <button
               className="text-[var(--gold)] underline-offset-2 hover:underline"
-              onClick={() => router.push("/app/provedores")}
+              onClick={wizard.openUpgradeModal}
             >
-              Adicionar minha chave de API
-            </button>{" "}
-            para continuar gerando sem limite.
+              Assine para continuar
+            </button>
+            .
+          </>
+        ) : wizard.hasOwnKey ? (
+          <>
+            <Icon name="infinity" /> Usando sua própria chave ({PROVIDER_LABELS[wizard.ownKeyProvider!]}).
           </>
         ) : (
-          `Plano Free: ${remaining} de ${FREE_LIFETIME_LIMIT} gerações restantes (uso total, não diário).`
+          `Teste grátis: ${wizard.trialDaysLeft} ${wizard.trialDaysLeft === 1 ? "dia restante" : "dias restantes"}, uso irrestrito.`
         )}
       </p>
 
@@ -125,15 +120,15 @@ export default function RoteirosPage() {
 
       <div className="flex items-center gap-2.5 mt-3 flex-wrap">
         <Btn
-          className={wizard.plan !== "pro" ? "opacity-55 hover:opacity-75 hover:border-[var(--gold)] hover:text-[var(--gold)]" : ""}
-          onClick={() => (wizard.plan !== "pro" ? wizard.requestPro() : wizard.openModal({ type: "eleven" }))}
+          className={!wizard.trialActive ? "opacity-55 hover:opacity-75 hover:border-[var(--gold)] hover:text-[var(--gold)]" : ""}
+          onClick={() => (!wizard.trialActive ? wizard.openUpgradeModal() : wizard.openModal({ type: "eleven" }))}
         >
           <Icon name="plug" /> Conectar minha voz (ElevenLabs)
         </Btn>
         <span className="text-[13px] text-[var(--text-2)]">
-          {wizard.plan !== "pro" ? (
+          {!wizard.trialActive ? (
             <>
-              <Icon name="lock" /> Disponível no plano Pro
+              <Icon name="lock" /> Requer teste grátis ativo ou assinatura
             </>
           ) : wizard.voiceCloned ? (
             <>
