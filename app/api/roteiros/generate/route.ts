@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { decryptApiKey } from "@/lib/crypto";
 import { createClient } from "@/lib/supabase/server";
 import { generateRoteiros, type LlmProvider } from "@/lib/ai/generate-roteiros";
-import { TRIAL_DAYS } from "@/lib/plan";
+import { allowedDurationsFor, getAccessPhase, type Duration } from "@/lib/plan";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,27 +14,29 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const trialEndsAt = new Date(user.created_at);
-  trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DAYS);
-  const trialActive = Date.now() < trialEndsAt.getTime();
+  const accessPhase = getAccessPhase(new Date(user.created_at));
   // TODO(Kiwify): swap this for a real subscription lookup once the webhook is wired up.
-  // Until then, nobody has an active paid subscription, by design — the 7-day trial
-  // is the only access path (see lib/plan.ts).
+  // Until then, nobody has an active paid subscription, by design — access phase alone
+  // decides what's allowed (see lib/plan.ts). Applies to BYOK too — bringing your own
+  // key does not bypass the phase (deliberate: see project memory on the trial redesign).
   const hasActiveSubscription = false;
 
-  if (!trialActive && !hasActiveSubscription) {
-    return NextResponse.json(
-      { error: "trial_expired", trialEndedAt: trialEndsAt.toISOString() },
-      { status: 402 },
-    );
+  if (accessPhase === "locked" && !hasActiveSubscription) {
+    return NextResponse.json({ error: "access_locked" }, { status: 402 });
   }
 
   const body = await request.json().catch(() => null);
   const qty = Math.max(1, Math.min(20, Number(body?.qty) || 1));
-  const duration = (["15s", "30s", "60s"] as const).includes(body?.duration) ? body.duration : "15s";
+  const requestedDuration = (["15s", "30s", "60s"] as const).includes(body?.duration)
+    ? (body.duration as Duration)
+    : "15s";
   const sourceType = String(body?.sourceType ?? "");
   const sourceText = String(body?.sourceText ?? "").trim();
   const sourceIsRealContent = sourceType === "texto" && sourceText.length > 0;
+
+  if (!hasActiveSubscription && !allowedDurationsFor(accessPhase).includes(requestedDuration)) {
+    return NextResponse.json({ error: "duration_not_allowed" }, { status: 403 });
+  }
 
   const { data: keyRow } = await supabase
     .from("user_api_keys")
@@ -43,32 +45,58 @@ export async function POST(request: Request) {
     .eq("category", "texto")
     .maybeSingle();
 
-  try {
-    const provider = (keyRow?.provider as LlmProvider | undefined) ?? "groq";
-    const apiKey = keyRow
-      ? decryptApiKey(keyRow.encrypted_key, keyRow.iv, keyRow.auth_tag)
-      : process.env.GROQ_API_KEY;
+  const genArgs = { qty, duration: requestedDuration, sourceHint: sourceText, sourceIsRealContent };
 
-    if (!apiKey) {
-      return NextResponse.json({ error: "server_not_configured" }, { status: 500 });
+  if (keyRow) {
+    // BYOK: never fall back to POSTime's own pool key — a failure here is the
+    // user's own key/provider and should surface as such, not get masked.
+    try {
+      const apiKey = decryptApiKey(keyRow.encrypted_key, keyRow.iv, keyRow.auth_tag);
+      const roteiros = await generateRoteiros({
+        provider: keyRow.provider as LlmProvider,
+        apiKey,
+        ...genArgs,
+      });
+      return NextResponse.json({ roteiros, mode: "byok" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      console.error("[/api/roteiros/generate] BYOK failed:", message);
+      if (/api key|unauthorized|401|invalid/i.test(message)) {
+        return NextResponse.json({ error: "invalid_key" }, { status: 401 });
+      }
+      return NextResponse.json({ error: "generation_failed" }, { status: 502 });
     }
-
-    const roteiros = await generateRoteiros({
-      provider,
-      apiKey,
-      qty,
-      duration,
-      sourceHint: sourceText,
-      sourceIsRealContent,
-    });
-
-    return NextResponse.json({ roteiros, mode: keyRow ? "byok" : "trial" });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "";
-    console.error("[/api/roteiros/generate]", message);
-    if (/api key|unauthorized|401|invalid/i.test(message)) {
-      return NextResponse.json({ error: "invalid_key" }, { status: 401 });
-    }
-    return NextResponse.json({ error: "generation_failed" }, { status: 502 });
   }
+
+  // Pool key (trial/free phase): everyone shares POSTime's own Groq key, which
+  // free-tier rate limits (see console.groq.com/docs/rate-limits) can exhaust under
+  // concurrent signups. Fall back to the Gemini key already provisioned from before
+  // the Groq switch, rather than surfacing a rate-limit error to the user.
+  const groqKey = process.env.GROQ_API_KEY;
+  const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+
+  if (groqKey) {
+    try {
+      const roteiros = await generateRoteiros({ provider: "groq", apiKey: groqKey, ...genArgs });
+      return NextResponse.json({ roteiros, mode: accessPhase });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      console.error("[/api/roteiros/generate] Groq pool key failed, falling back to Gemini:", message);
+    }
+  }
+
+  if (googleKey) {
+    try {
+      const roteiros = await generateRoteiros({ provider: "google", apiKey: googleKey, ...genArgs });
+      return NextResponse.json({ roteiros, mode: accessPhase });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      console.error("[/api/roteiros/generate] Gemini fallback also failed:", message);
+    }
+  }
+
+  if (!groqKey && !googleKey) {
+    return NextResponse.json({ error: "server_not_configured" }, { status: 500 });
+  }
+  return NextResponse.json({ error: "generation_failed" }, { status: 502 });
 }

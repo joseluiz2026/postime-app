@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/lib/icons";
-import { TRIAL_DAYS } from "@/lib/plan";
+import { FREE_DAILY_VIDEOS, FREE_DAYS, TRIAL_DAILY_VIDEOS, TRIAL_DAYS } from "@/lib/plan";
 import { PROVIDER_LABELS } from "@/lib/ai/generate-roteiros";
 import { useWizard } from "@/lib/wizard-context";
 import { Btn, Card, HelpTip, IconBtn, Pill, TextArea } from "@/components/app/ui";
@@ -21,18 +21,20 @@ export default function RoteirosPage() {
         <div className="flex items-center gap-2">
           <span
             className={`font-mono text-xs px-3 py-1.5 rounded-full border-[0.5px] ${
-              wizard.trialActive
+              wizard.accessPhase === "trial"
                 ? "text-[var(--teal)] bg-[color-mix(in_srgb,var(--teal)_8%,transparent)] border-[color-mix(in_srgb,var(--teal)_25%,transparent)]"
                 : "text-[var(--gold)] bg-[color-mix(in_srgb,var(--gold)_10%,transparent)] border-[color-mix(in_srgb,var(--gold)_30%,transparent)]"
             }`}
           >
-            {wizard.trialActive
-              ? `Teste grátis · ${wizard.trialDaysLeft} ${wizard.trialDaysLeft === 1 ? "dia restante" : "dias restantes"}`
-              : "Teste grátis encerrado"}
+            {wizard.accessPhase === "trial" &&
+              `Teste grátis · ${wizard.phaseDaysLeft} ${wizard.phaseDaysLeft === 1 ? "dia restante" : "dias restantes"}`}
+            {wizard.accessPhase === "free" &&
+              `Modo limitado · ${wizard.phaseDaysLeft} ${wizard.phaseDaysLeft === 1 ? "dia restante" : "dias restantes"}`}
+            {wizard.accessPhase === "locked" && "Acesso encerrado"}
           </span>
           <HelpTip
             label="Como funciona o teste grátis"
-            text={`${TRIAL_DAYS} dias de uso irrestrito a partir do cadastro, sem limite de gerações. Depois disso, é preciso de uma assinatura ativa para continuar — não existe outro plano gratuito, mesmo com chave própria conectada.`}
+            text={`${TRIAL_DAYS} dias com até ${TRIAL_DAILY_VIDEOS} vídeos por dia, qualquer duração. Depois disso, mais ${FREE_DAYS} dias em modo limitado (até ${FREE_DAILY_VIDEOS} vídeos por dia, só 15s, sem clonagem de voz). Depois disso, é preciso de uma assinatura ativa para continuar — mesmo com chave própria conectada.`}
           />
         </div>
       </div>
@@ -52,11 +54,21 @@ export default function RoteirosPage() {
         <div>
           <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Duração</span>
           <div className="flex gap-2">
-            {(["15s", "30s", "60s"] as const).map((d) => (
-              <Pill key={d} selected={wizard.duration === d} onClick={() => wizard.setDuration(d)}>
-                {d}
-              </Pill>
-            ))}
+            {(["15s", "30s", "60s"] as const).map((d) => {
+              const allowed = wizard.allowedDurations.includes(d);
+              return (
+                <Pill
+                  key={d}
+                  selected={wizard.duration === d}
+                  onClick={() => wizard.setDuration(d)}
+                  disabled={!allowed}
+                  title={allowed ? undefined : "Disponível só no teste grátis ou com assinatura"}
+                  className={allowed ? "" : "opacity-40 cursor-not-allowed"}
+                >
+                  {d}
+                </Pill>
+              );
+            })}
           </div>
         </div>
         <div>
@@ -81,7 +93,7 @@ export default function RoteirosPage() {
               variant="primary"
               className="ml-2.5"
               onClick={wizard.clickGerar}
-              disabled={wizard.generating || !wizard.trialActive}
+              disabled={wizard.generating || wizard.accessPhase === "locked"}
             >
               <Icon name="loader-2" spin={wizard.generating} className={wizard.generating ? "" : "hidden"} />
               <Icon name="bolt" className={wizard.generating ? "hidden" : ""} />
@@ -92,9 +104,9 @@ export default function RoteirosPage() {
       </div>
 
       <p className="text-[13px] text-[var(--text-2)] mt-3 leading-relaxed">
-        {!wizard.trialActive ? (
+        {wizard.accessPhase === "locked" ? (
           <>
-            <Icon name="lock" /> Seu teste grátis acabou.{" "}
+            <Icon name="lock" /> Seu acesso grátis acabou.{" "}
             <button
               className="text-[var(--gold)] underline-offset-2 hover:underline"
               onClick={wizard.openUpgradeModal}
@@ -107,8 +119,10 @@ export default function RoteirosPage() {
           <>
             <Icon name="infinity" /> Usando sua própria chave ({PROVIDER_LABELS[wizard.ownKeyProvider!]}).
           </>
+        ) : wizard.accessPhase === "free" ? (
+          `Modo limitado: ${wizard.phaseDaysLeft} ${wizard.phaseDaysLeft === 1 ? "dia restante" : "dias restantes"} · até ${FREE_DAILY_VIDEOS} vídeos de 15s por dia.`
         ) : (
-          `Teste grátis: ${wizard.trialDaysLeft} ${wizard.trialDaysLeft === 1 ? "dia restante" : "dias restantes"}, uso irrestrito.`
+          `Teste grátis: ${wizard.phaseDaysLeft} ${wizard.phaseDaysLeft === 1 ? "dia restante" : "dias restantes"} · até ${TRIAL_DAILY_VIDEOS} vídeos por dia, qualquer duração.`
         )}
       </p>
 
@@ -120,13 +134,13 @@ export default function RoteirosPage() {
 
       <div className="flex items-center gap-2.5 mt-3 flex-wrap">
         <Btn
-          className={!wizard.trialActive ? "opacity-55 hover:opacity-75 hover:border-[var(--gold)] hover:text-[var(--gold)]" : ""}
-          onClick={() => (!wizard.trialActive ? wizard.openUpgradeModal() : wizard.openModal({ type: "eleven" }))}
+          className={wizard.accessPhase !== "trial" ? "opacity-55 hover:opacity-75 hover:border-[var(--gold)] hover:text-[var(--gold)]" : ""}
+          onClick={() => (wizard.accessPhase !== "trial" ? wizard.openUpgradeModal() : wizard.openModal({ type: "eleven" }))}
         >
           <Icon name="plug" /> Conectar minha voz (ElevenLabs)
         </Btn>
         <span className="text-[13px] text-[var(--text-2)]">
-          {!wizard.trialActive ? (
+          {wizard.accessPhase !== "trial" ? (
             <>
               <Icon name="lock" /> Requer teste grátis ativo ou assinatura
             </>

@@ -13,8 +13,17 @@ import {
 } from "react";
 import type { LlmProvider } from "./ai/generate-roteiros";
 import type { MusicMood } from "./audio/moods";
+import {
+  type AccessPhase,
+  type Duration,
+  allowedDurationsFor,
+  dailyVideoLimitFor,
+  getAccessPhase,
+  getPhaseDaysLeft,
+} from "./plan";
 import { createClient } from "./supabase/client";
 
+export type { Duration } from "./plan";
 export type SourceType = "ebook" | "texto" | "link" | "youtube" | "websearch";
 export type StyleName =
   | "Minimalista"
@@ -23,7 +32,6 @@ export type StyleName =
   | "Neon Bold"
   | "Kinetic Text"
   | "Split Screen";
-export type Duration = "15s" | "30s" | "60s";
 
 export type OwnImage = { name: string; url: string };
 export type Roteiro = { meta: string; text: string; mood?: MusicMood };
@@ -73,10 +81,13 @@ function normalizeForMatch(str: string): string {
 type WizardState = {
   // account
   accountName: string;
-  // 7-day unrestricted trial from signup is the only free access path — see lib/plan.ts.
-  // No plan toggle, no per-generation counter: trialActive is derived from account age.
-  trialActive: boolean;
-  trialDaysLeft: number;
+  // Access phase is derived purely from account age (trial → free → locked) — see
+  // lib/plan.ts for the day counts and per-phase video/duration limits. No plan
+  // toggle, no per-generation counter.
+  accessPhase: AccessPhase;
+  phaseDaysLeft: number;
+  dailyVideoLimit: number | null;
+  allowedDurations: readonly Duration[];
   voiceCloned: boolean;
   selectedVoiceName: string;
 
@@ -178,26 +189,28 @@ export function WizardProvider({
   initialName,
   userEmail,
   userId,
-  trialEndsAt,
+  createdAt,
 }: {
   children: ReactNode;
   initialName: string;
   userEmail: string;
   userId: string;
-  /** ISO timestamp — signup time + TRIAL_DAYS, computed server-side in app/app/layout.tsx from the real auth user's created_at. */
-  trialEndsAt: string;
+  /** ISO timestamp — the real auth user's created_at, from app/app/layout.tsx. Access phase (see lib/plan.ts) is derived from this. */
+  createdAt: string;
 }) {
   const router = useRouter();
   const [accountName, setAccountNameState] = useState(initialName);
   const [voiceCloned, setVoiceCloned] = useState(false);
   const [selectedVoiceName, setSelectedVoiceName] = useState("");
 
-  const trialEndsAtMs = new Date(trialEndsAt).getTime();
+  const createdAtDate = new Date(createdAt);
   // Date.now() can't be read directly during render (impure) — a lazy useState
   // initializer is the sanctioned escape hatch, evaluated once at mount.
   const [now] = useState(() => Date.now());
-  const trialActive = now < trialEndsAtMs;
-  const trialDaysLeft = Math.max(0, Math.ceil((trialEndsAtMs - now) / 86_400_000));
+  const accessPhase = getAccessPhase(createdAtDate, now);
+  const phaseDaysLeft = getPhaseDaysLeft(createdAtDate, now);
+  const dailyVideoLimit = dailyVideoLimitFor(accessPhase);
+  const allowedDurations = allowedDurationsFor(accessPhase);
 
   const [hasOwnKey, setHasOwnKey] = useState(false);
   const [ownKeyProvider, setOwnKeyProvider] = useState<LlmProvider | null>(null);
@@ -215,7 +228,7 @@ export function WizardProvider({
   const [websearch, setWebsearch] = useState("");
   const [ownImages, setOwnImages] = useState<OwnImage[]>([]);
 
-  const [duration, setDuration] = useState<Duration>("15s");
+  const [duration, setDurationState] = useState<Duration>("15s");
   const [qty, setQtyState] = useState(3);
   const [roteiros, setRoteiros] = useState<Roteiro[]>([]);
 
@@ -335,6 +348,14 @@ export function WizardProvider({
     });
   }, []);
 
+  const setDuration = useCallback(
+    (d: Duration) => {
+      if (!allowedDurations.includes(d)) return;
+      setDurationState(d);
+    },
+    [allowedDurations],
+  );
+
   const qtyMax = useCallback(() => 20, []);
 
   const setQty = useCallback(
@@ -390,8 +411,10 @@ export function WizardProvider({
       });
       const data = await res.json();
       if (!res.ok) {
-        if (data.error === "trial_expired") {
+        if (data.error === "access_locked") {
           openModal({ type: "upgrade" });
+        } else if (data.error === "duration_not_allowed") {
+          setGenerateError("Essa duração só está disponível nos primeiros 7 dias ou com assinatura ativa.");
         } else if (data.error === "invalid_key") {
           setGenerateError("Sua chave de API parece inválida. Verifique em Minha conta.");
         } else {
@@ -420,8 +443,10 @@ export function WizardProvider({
         });
         const data = await res.json();
         if (!res.ok) {
-          if (data.error === "trial_expired") {
+          if (data.error === "access_locked") {
             openModal({ type: "upgrade" });
+          } else if (data.error === "duration_not_allowed") {
+            setGenerateError("Essa duração só está disponível nos primeiros 7 dias ou com assinatura ativa.");
           } else {
             setGenerateError("Não foi possível regenerar agora.");
           }
@@ -492,6 +517,7 @@ export function WizardProvider({
         return false;
       }
       const images: ({ url: string; photographer: string } | null)[] = data.images;
+      let dailyLimitHit = false;
       const built: Omit<Video, "id">[] = await Promise.all(
         indices.map(async (i, pos): Promise<Omit<Video, "id">> => {
           const image = images[pos];
@@ -502,7 +528,7 @@ export function WizardProvider({
             imageCredit: image?.photographer,
           };
           const audioPath = audioPaths[i];
-          if (!image?.url || !audioPath) return base;
+          if (!image?.url || !audioPath || dailyLimitHit) return base;
           try {
             const renderRes = await fetch("/api/jobs/render", {
               method: "POST",
@@ -510,7 +536,10 @@ export function WizardProvider({
               body: JSON.stringify({ audioPath, imageUrl: image.url }),
             });
             const renderData = await renderRes.json();
-            if (!renderRes.ok) return base;
+            if (!renderRes.ok) {
+              if (renderData?.error === "daily_video_limit_reached") dailyLimitHit = true;
+              return base;
+            }
             return {
               ...base,
               videoUrl: renderData.videoUrl,
@@ -526,6 +555,9 @@ export function WizardProvider({
       applyVideos(built, `${indices.length} vídeos gerados hoje · estilo ${selectedStyle} · fonte: ${label}`);
       setUsedTemas((prev) => prev.map((v, i) => (indices.includes(i) ? true : v)));
       setSelectedForVideo([]);
+      if (dailyLimitHit) {
+        setBuildError("Você atingiu o limite de vídeos de hoje. Volte amanhã ou assine para continuar sem limite.");
+      }
       return true;
     } catch {
       setBuildError("Falha de conexão. Tente novamente.");
@@ -536,7 +568,7 @@ export function WizardProvider({
   }, [selectedForVideo, selectedStyle, sourceLabel, applyVideos, roteiros, audioPaths]);
 
   const clickAutoGenerate = useCallback(() => {
-    if (!trialActive) {
+    if (accessPhase === "locked") {
       openModal({ type: "upgrade" });
       return;
     }
@@ -554,8 +586,10 @@ export function WizardProvider({
           });
           const data = await res.json();
           if (!res.ok) {
-            if (data.error === "trial_expired") {
+            if (data.error === "access_locked") {
               openModal({ type: "upgrade" });
+            } else if (data.error === "duration_not_allowed") {
+              setGenerateError("Essa duração só está disponível nos primeiros 7 dias ou com assinatura ativa.");
             } else {
               setGenerateError("Não foi possível gerar agora.");
             }
@@ -577,7 +611,7 @@ export function WizardProvider({
         }
       },
     });
-  }, [trialActive, duration, sourceType, requestSourceText, openModal, resetVideoTracking, sourceLabel, applyVideos, closeModal]);
+  }, [accessPhase, duration, sourceType, requestSourceText, openModal, resetVideoTracking, sourceLabel, applyVideos, closeModal]);
 
   const connectEleven = useCallback((name: string) => {
     setVoiceCloned(true);
@@ -610,8 +644,10 @@ export function WizardProvider({
   const value = useMemo<WizardContextValue>(
     () => ({
       accountName,
-      trialActive,
-      trialDaysLeft,
+      accessPhase,
+      phaseDaysLeft,
+      dailyVideoLimit,
+      allowedDurations,
       voiceCloned,
       selectedVoiceName,
       hasOwnKey,
@@ -681,8 +717,10 @@ export function WizardProvider({
     }),
     [
       accountName,
-      trialActive,
-      trialDaysLeft,
+      accessPhase,
+      phaseDaysLeft,
+      dailyVideoLimit,
+      allowedDurations,
       voiceCloned,
       selectedVoiceName,
       hasOwnKey,
@@ -723,6 +761,7 @@ export function WizardProvider({
       removeOwnImage,
       sourceLabel,
       matchedOwnImageIndices,
+      setDuration,
       setQty,
       qtyMax,
       openUpgradeModal,

@@ -1,7 +1,7 @@
 "use client";
 
 import { Icon } from "@/lib/icons";
-import { KIWIFY_CHECKOUT_URL, TRIAL_DAYS } from "@/lib/plan";
+import { FREE_DAYS, KIWIFY_CHECKOUT_URL, TRIAL_DAYS } from "@/lib/plan";
 import { useWizard } from "@/lib/wizard-context";
 import { Btn, ModalShell } from "../ui";
 
@@ -12,9 +12,12 @@ export function UpgradeModal() {
   return (
     <ModalShell open={open} onClose={wizard.closeModal} icon="rocket" title="Assine para continuar">
       <p className="text-[var(--text-2)] text-[13.5px] leading-relaxed mb-6">
-        Seus {TRIAL_DAYS} dias de teste grátis com uso irrestrito {wizard.trialActive ? "estão acabando" : "terminaram"}.
-        Para continuar gerando roteiros, imagens, narração e vídeo, é preciso de uma assinatura ativa — não existe
-        outro plano gratuito.
+        {wizard.accessPhase === "locked"
+          ? `Seus ${TRIAL_DAYS + FREE_DAYS} dias grátis acabaram.`
+          : wizard.accessPhase === "free"
+            ? "Você está no modo limitado (até 2 vídeos de 15s por dia) — isso passa do que esse modo permite."
+            : "Você atingiu o limite de hoje, ou tentou um recurso que exige assinatura."}{" "}
+        Para continuar sem limite, é preciso de uma assinatura ativa — não existe outro plano gratuito.
       </p>
       <div className="flex flex-col gap-2.5">
         <Btn

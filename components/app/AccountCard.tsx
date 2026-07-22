@@ -53,10 +53,12 @@ export function AccountCard() {
               {wizard.accountName}
             </div>
           )}
-          <div className={`font-mono text-[10.5px] mt-0.5 ${wizard.trialActive ? "text-[var(--text-3)]" : "text-[var(--gold)]"}`}>
-            {wizard.trialActive
-              ? `Teste grátis · ${wizard.trialDaysLeft} ${wizard.trialDaysLeft === 1 ? "dia restante" : "dias restantes"}`
-              : "Teste grátis encerrado"}
+          <div className={`font-mono text-[10.5px] mt-0.5 ${wizard.accessPhase === "trial" ? "text-[var(--text-3)]" : "text-[var(--gold)]"}`}>
+            {wizard.accessPhase === "trial" &&
+              `Teste grátis · ${wizard.phaseDaysLeft} ${wizard.phaseDaysLeft === 1 ? "dia restante" : "dias restantes"}`}
+            {wizard.accessPhase === "free" &&
+              `Modo limitado · ${wizard.phaseDaysLeft} ${wizard.phaseDaysLeft === 1 ? "dia restante" : "dias restantes"}`}
+            {wizard.accessPhase === "locked" && "Acesso encerrado"}
           </div>
         </div>
       </div>
