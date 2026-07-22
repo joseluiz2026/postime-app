@@ -32,23 +32,21 @@ export function getPhaseDaysLeft(createdAt: Date, now: number = Date.now()): num
   return Math.max(0, Math.ceil(phaseEndDay - daysSinceSignup));
 }
 
-export function dailyVideoLimitFor(phase: AccessPhase): number | null {
+/** An active subscription (see public.subscriptions, written by the Kiwify webhook) always overrides the phase-based limits below. */
+export function dailyVideoLimitFor(phase: AccessPhase, isSubscribed: boolean): number | null {
+  if (isSubscribed) return null;
   if (phase === "trial") return TRIAL_DAILY_VIDEOS;
   if (phase === "free") return FREE_DAILY_VIDEOS;
   return null;
 }
 
-export function allowedDurationsFor(phase: AccessPhase): readonly Duration[] {
+export function allowedDurationsFor(phase: AccessPhase, isSubscribed: boolean): readonly Duration[] {
+  if (isSubscribed) return ALL_DURATIONS;
   return phase === "free" ? FREE_DURATIONS : ALL_DURATIONS;
 }
 
 /**
- * Kiwify checkout link for the POSTime subscription. Access phase is still computed
- * purely from signup date + the constants above — this link lets someone pay, but
- * nothing yet marks their account as subscribed after checkout.
- * TODO(Kiwify): once the webhook is wired up, replace the hardcoded
- * `hasActiveSubscription = false` in the API routes with a real lookup, which should
- * make getAccessPhase irrelevant for a subscribed account (unrestricted regardless of
- * signup date).
+ * Kiwify checkout link for the POSTime subscription. See app/api/webhooks/kiwify for
+ * how a completed checkout turns into a public.subscriptions row.
  */
 export const KIWIFY_CHECKOUT_URL = "https://pay.kiwify.com.br/HRodY1I";

@@ -19,14 +19,14 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const accessPhase = getAccessPhase(new Date(user.created_at));
-  // TODO(Kiwify): same subscription seam as app/api/roteiros/generate/route.ts.
-  const hasActiveSubscription = false;
+  const { data: subRow } = await supabase.from("subscriptions").select("status").eq("user_id", user.id).maybeSingle();
+  const hasActiveSubscription = subRow?.status === "active";
 
   if (accessPhase === "locked" && !hasActiveSubscription) {
     return NextResponse.json({ error: "access_locked" }, { status: 402 });
   }
 
-  const dailyLimit = hasActiveSubscription ? null : dailyVideoLimitFor(accessPhase);
+  const dailyLimit = dailyVideoLimitFor(accessPhase, hasActiveSubscription);
   if (dailyLimit !== null) {
     const now = new Date();
     const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();

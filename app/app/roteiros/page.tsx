@@ -21,16 +21,17 @@ export default function RoteirosPage() {
         <div className="flex items-center gap-2">
           <span
             className={`font-mono text-xs px-3 py-1.5 rounded-full border-[0.5px] ${
-              wizard.accessPhase === "trial"
+              wizard.isSubscribed || wizard.accessPhase === "trial"
                 ? "text-[var(--teal)] bg-[color-mix(in_srgb,var(--teal)_8%,transparent)] border-[color-mix(in_srgb,var(--teal)_25%,transparent)]"
                 : "text-[var(--gold)] bg-[color-mix(in_srgb,var(--gold)_10%,transparent)] border-[color-mix(in_srgb,var(--gold)_30%,transparent)]"
             }`}
           >
-            {wizard.accessPhase === "trial" &&
+            {wizard.isSubscribed && "Assinatura ativa"}
+            {!wizard.isSubscribed && wizard.accessPhase === "trial" &&
               `Teste grátis · ${wizard.phaseDaysLeft} ${wizard.phaseDaysLeft === 1 ? "dia restante" : "dias restantes"}`}
-            {wizard.accessPhase === "free" &&
+            {!wizard.isSubscribed && wizard.accessPhase === "free" &&
               `Modo limitado · ${wizard.phaseDaysLeft} ${wizard.phaseDaysLeft === 1 ? "dia restante" : "dias restantes"}`}
-            {wizard.accessPhase === "locked" && "Acesso encerrado"}
+            {!wizard.isSubscribed && wizard.accessPhase === "locked" && "Acesso encerrado"}
           </span>
           <HelpTip
             label="Como funciona o teste grátis"
@@ -93,7 +94,7 @@ export default function RoteirosPage() {
               variant="primary"
               className="ml-2.5"
               onClick={wizard.clickGerar}
-              disabled={wizard.generating || wizard.accessPhase === "locked"}
+              disabled={wizard.generating || (wizard.accessPhase === "locked" && !wizard.isSubscribed)}
             >
               <Icon name="loader-2" spin={wizard.generating} className={wizard.generating ? "" : "hidden"} />
               <Icon name="bolt" className={wizard.generating ? "hidden" : ""} />
@@ -104,7 +105,11 @@ export default function RoteirosPage() {
       </div>
 
       <p className="text-[13px] text-[var(--text-2)] mt-3 leading-relaxed">
-        {wizard.accessPhase === "locked" ? (
+        {wizard.isSubscribed ? (
+          <>
+            <Icon name="infinity" /> Assinatura ativa: uso sem limite.
+          </>
+        ) : wizard.accessPhase === "locked" ? (
           <>
             <Icon name="lock" /> Seu acesso grátis acabou.{" "}
             <button
@@ -134,13 +139,21 @@ export default function RoteirosPage() {
 
       <div className="flex items-center gap-2.5 mt-3 flex-wrap">
         <Btn
-          className={wizard.accessPhase !== "trial" ? "opacity-55 hover:opacity-75 hover:border-[var(--gold)] hover:text-[var(--gold)]" : ""}
-          onClick={() => (wizard.accessPhase !== "trial" ? wizard.openUpgradeModal() : wizard.openModal({ type: "eleven" }))}
+          className={
+            wizard.accessPhase !== "trial" && !wizard.isSubscribed
+              ? "opacity-55 hover:opacity-75 hover:border-[var(--gold)] hover:text-[var(--gold)]"
+              : ""
+          }
+          onClick={() =>
+            wizard.accessPhase !== "trial" && !wizard.isSubscribed
+              ? wizard.openUpgradeModal()
+              : wizard.openModal({ type: "eleven" })
+          }
         >
           <Icon name="plug" /> Conectar minha voz (ElevenLabs)
         </Btn>
         <span className="text-[13px] text-[var(--text-2)]">
-          {wizard.accessPhase !== "trial" ? (
+          {wizard.accessPhase !== "trial" && !wizard.isSubscribed ? (
             <>
               <Icon name="lock" /> Requer teste grátis ativo ou assinatura
             </>

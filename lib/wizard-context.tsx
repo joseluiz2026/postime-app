@@ -86,6 +86,7 @@ type WizardState = {
   // toggle, no per-generation counter.
   accessPhase: AccessPhase;
   phaseDaysLeft: number;
+  isSubscribed: boolean;
   dailyVideoLimit: number | null;
   allowedDurations: readonly Duration[];
   voiceCloned: boolean;
@@ -209,8 +210,9 @@ export function WizardProvider({
   const [now] = useState(() => Date.now());
   const accessPhase = getAccessPhase(createdAtDate, now);
   const phaseDaysLeft = getPhaseDaysLeft(createdAtDate, now);
-  const dailyVideoLimit = dailyVideoLimitFor(accessPhase);
-  const allowedDurations = allowedDurationsFor(accessPhase);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const dailyVideoLimit = dailyVideoLimitFor(accessPhase, isSubscribed);
+  const allowedDurations = allowedDurationsFor(accessPhase, isSubscribed);
 
   const [hasOwnKey, setHasOwnKey] = useState(false);
   const [ownKeyProvider, setOwnKeyProvider] = useState<LlmProvider | null>(null);
@@ -254,14 +256,14 @@ export function WizardProvider({
 
   const refreshUsage = useCallback(async () => {
     const supabase = createClient();
-    const { data } = await supabase
-      .from("user_api_keys")
-      .select("provider, created_at")
-      .eq("category", "texto")
-      .maybeSingle();
-    setHasOwnKey(!!data);
-    setOwnKeyProvider((data?.provider as LlmProvider | undefined) ?? null);
-  }, []);
+    const [keyRes, subRes] = await Promise.all([
+      supabase.from("user_api_keys").select("provider, created_at").eq("category", "texto").maybeSingle(),
+      supabase.from("subscriptions").select("status").maybeSingle(),
+    ]);
+    setHasOwnKey(!!keyRes.data);
+    setOwnKeyProvider((keyRes.data?.provider as LlmProvider | undefined) ?? null);
+    setIsSubscribed(subRes.data?.status === "active");
+  }, [setIsSubscribed]);
 
   useEffect(() => {
     refreshUsage();
@@ -646,6 +648,7 @@ export function WizardProvider({
       accountName,
       accessPhase,
       phaseDaysLeft,
+      isSubscribed,
       dailyVideoLimit,
       allowedDurations,
       voiceCloned,
@@ -719,6 +722,7 @@ export function WizardProvider({
       accountName,
       accessPhase,
       phaseDaysLeft,
+      isSubscribed,
       dailyVideoLimit,
       allowedDurations,
       voiceCloned,

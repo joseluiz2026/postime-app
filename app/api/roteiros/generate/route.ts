@@ -15,11 +15,10 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const accessPhase = getAccessPhase(new Date(user.created_at));
-  // TODO(Kiwify): swap this for a real subscription lookup once the webhook is wired up.
-  // Until then, nobody has an active paid subscription, by design — access phase alone
-  // decides what's allowed (see lib/plan.ts). Applies to BYOK too — bringing your own
-  // key does not bypass the phase (deliberate: see project memory on the trial redesign).
-  const hasActiveSubscription = false;
+  // Applies to BYOK too — bringing your own key does not bypass the phase or an
+  // expired subscription (deliberate: see project memory on the trial redesign).
+  const { data: subRow } = await supabase.from("subscriptions").select("status").eq("user_id", user.id).maybeSingle();
+  const hasActiveSubscription = subRow?.status === "active";
 
   if (accessPhase === "locked" && !hasActiveSubscription) {
     return NextResponse.json({ error: "access_locked" }, { status: 402 });
@@ -34,7 +33,7 @@ export async function POST(request: Request) {
   const sourceText = String(body?.sourceText ?? "").trim();
   const sourceIsRealContent = sourceType === "texto" && sourceText.length > 0;
 
-  if (!hasActiveSubscription && !allowedDurationsFor(accessPhase).includes(requestedDuration)) {
+  if (!allowedDurationsFor(accessPhase, hasActiveSubscription).includes(requestedDuration)) {
     return NextResponse.json({ error: "duration_not_allowed" }, { status: 403 });
   }
 
