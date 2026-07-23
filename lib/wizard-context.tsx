@@ -130,8 +130,8 @@ type WizardState = {
 
   // estilo
   selectedStyle: StyleName;
-  sceneSeconds: SceneSeconds;
-  musicMood: MusicMoodSelection;
+  sceneSecondsByTema: SceneSeconds[];
+  musicMoodByTema: MusicMoodSelection[];
 
   // download
   videos: Video[];
@@ -178,8 +178,8 @@ type WizardContextValue = WizardState & {
   toggleSelectedForVideo: (idx: number) => void;
 
   setSelectedStyle: (s: StyleName) => void;
-  setSceneSeconds: (s: SceneSeconds) => void;
-  setMusicMood: (m: MusicMoodSelection) => void;
+  setSceneSecondsForTema: (idx: number, s: SceneSeconds) => void;
+  setMusicMoodForTema: (idx: number, m: MusicMoodSelection) => void;
   confirmBuild: () => Promise<boolean>;
   buildingVideos: boolean;
   buildError: string | null;
@@ -255,8 +255,16 @@ export function WizardProvider({
   const [audioError, setAudioError] = useState<string | null>(null);
 
   const [selectedStyle, setSelectedStyle] = useState<StyleName>("Minimalista");
-  const [sceneSeconds, setSceneSeconds] = useState<SceneSeconds>(3);
-  const [musicMood, setMusicMood] = useState<MusicMoodSelection>("auto");
+  const [sceneSecondsByTema, setSceneSecondsByTema] = useState<SceneSeconds[]>([]);
+  const [musicMoodByTema, setMusicMoodByTema] = useState<MusicMoodSelection[]>([]);
+
+  const setSceneSecondsForTema = useCallback((idx: number, s: SceneSeconds) => {
+    setSceneSecondsByTema((prev) => prev.map((v, i) => (i === idx ? s : v)));
+  }, []);
+
+  const setMusicMoodForTema = useCallback((idx: number, m: MusicMoodSelection) => {
+    setMusicMoodByTema((prev) => prev.map((v, i) => (i === idx ? m : v)));
+  }, []);
 
   const [videos, setVideos] = useState<Video[]>([]);
   const [videoCountStatus, setVideoCountStatus] = useState("");
@@ -435,6 +443,8 @@ export function WizardProvider({
     setUsedTemas(new Array(n).fill(false));
     setSelectedForVideo([]);
     setAudioPaths(new Array(n).fill(null));
+    setSceneSecondsByTema(new Array(n).fill(3));
+    setMusicMoodByTema(new Array(n).fill("auto"));
   }, []);
 
   const applyVideos = useCallback(
@@ -628,8 +638,8 @@ export function WizardProvider({
                 imageUrl: image.url,
                 text: roteiros[i]?.text ?? "",
                 style: selectedStyle,
-                mood: musicMood === "auto" ? roteiros[i]?.mood : musicMood,
-                sceneSeconds,
+                mood: (musicMoodByTema[i] ?? "auto") === "auto" ? roteiros[i]?.mood : musicMoodByTema[i],
+                sceneSeconds: sceneSecondsByTema[i] ?? 3,
               }),
             });
             const renderData = await renderRes.json();
@@ -665,8 +675,8 @@ export function WizardProvider({
   }, [
     selectedForVideo,
     selectedStyle,
-    sceneSeconds,
-    musicMood,
+    sceneSecondsByTema,
+    musicMoodByTema,
     sourceLabel,
     applyVideos,
     roteiros,
@@ -785,8 +795,8 @@ export function WizardProvider({
       audioUploading,
       audioError,
       selectedStyle,
-      sceneSeconds,
-      musicMood,
+      sceneSecondsByTema,
+      musicMoodByTema,
       videos,
       videoCountStatus,
       buildingVideos,
@@ -822,8 +832,8 @@ export function WizardProvider({
       skipAudio,
       toggleSelectedForVideo,
       setSelectedStyle,
-      setSceneSeconds,
-      setMusicMood,
+      setSceneSecondsForTema,
+      setMusicMoodForTema,
       confirmBuild,
       clickAutoGenerate,
       connectEleven,
@@ -867,8 +877,8 @@ export function WizardProvider({
       audioUploading,
       audioError,
       selectedStyle,
-      sceneSeconds,
-      musicMood,
+      sceneSecondsByTema,
+      musicMoodByTema,
       videos,
       videoCountStatus,
       buildingVideos,
@@ -896,6 +906,8 @@ export function WizardProvider({
       uploadRecording,
       skipAudio,
       toggleSelectedForVideo,
+      setSceneSecondsForTema,
+      setMusicMoodForTema,
       confirmBuild,
       clickAutoGenerate,
       connectEleven,

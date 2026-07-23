@@ -104,6 +104,7 @@ export default function EstiloPage() {
   const n = wizard.selectedForVideo.length;
   const [showWarning, setShowWarning] = useState(false);
   const [prevN, setPrevN] = useState(n);
+  const sortedSelected = [...wizard.selectedForVideo].sort((a, b) => a - b);
   const matched = wizard.matchedOwnImageIndices();
   const matchedTemas = wizard.selectedForVideo
     .map((i) => ({ i, img: wizard.matchedOwnImageForRoteiro(i) }))
@@ -152,39 +153,58 @@ export default function EstiloPage() {
         ))}
       </div>
 
-      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
-        <span className="block text-xs font-medium text-[var(--text-2)] mb-2">
-          Duração de cada cena
-          <HelpTip
-            label="Como isso afeta o vídeo"
-            text="Cada cena é uma foto. O app soma a duração da narração (ou da legenda, se você pulou a gravação) com 6 segundos de folga e divide pelo tempo de cena escolhido — o resultado é quantas fotos entram no vídeo."
-          />
-        </span>
-        <div className="flex gap-2">
-          {SCENE_SECONDS_OPTIONS.map((s) => (
-            <Pill key={s} selected={wizard.sceneSeconds === s} onClick={() => wizard.setSceneSeconds(s)}>
-              {s}s
-            </Pill>
-          ))}
+      {n > 0 && (
+        <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
+          <span className="block text-xs font-medium text-[var(--text-2)] mb-3">
+            Cena e música por vídeo
+            <HelpTip
+              label="Como isso afeta cada vídeo"
+              text={
+                <>
+                  <strong>Duração de cena:</strong> cada cena é uma foto — o app soma a duração da narração (ou da
+                  legenda, se você pulou a gravação) com 6 segundos de folga e divide pelo tempo escolhido pra saber
+                  quantas fotos entram. <strong>Música:</strong> no automático, o clima já vem definido pela IA pra
+                  esse roteiro; escolhendo um clima aqui, só esse vídeo usa esse clima em vez do automático.
+                </>
+              }
+            />
+          </span>
+          <div className="flex flex-col gap-2.5">
+            {sortedSelected.map((i) => (
+              <div
+                key={i}
+                className="flex items-center gap-4 flex-wrap p-3 rounded-lg bg-[var(--bg-2)] border-[0.5px] border-[var(--line)]"
+              >
+                <span className="text-[12.5px] font-semibold text-[var(--text-1)] shrink-0 w-16">
+                  Tema {String(i + 1).padStart(2, "0")}
+                </span>
+                <div className="flex gap-1.5 shrink-0">
+                  {SCENE_SECONDS_OPTIONS.map((s) => (
+                    <Pill
+                      key={s}
+                      selected={(wizard.sceneSecondsByTema[i] ?? 3) === s}
+                      onClick={() => wizard.setSceneSecondsForTema(i, s)}
+                    >
+                      {s}s
+                    </Pill>
+                  ))}
+                </div>
+                <div className="flex gap-1.5 flex-wrap">
+                  {MUSIC_MOOD_OPTIONS.map((m) => (
+                    <Pill
+                      key={m.id}
+                      selected={(wizard.musicMoodByTema[i] ?? "auto") === m.id}
+                      onClick={() => wizard.setMusicMoodForTema(i, m.id)}
+                    >
+                      {m.label}
+                    </Pill>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-
-      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
-        <span className="block text-xs font-medium text-[var(--text-2)] mb-2">
-          Música de fundo
-          <HelpTip
-            label="Como funciona a escolha automática"
-            text="No automático, cada roteiro já tem um clima definido pela IA (motivacional, calmo, corporativo ou animado) e o vídeo usa uma faixa desse clima. Escolhendo um clima aqui, todos os vídeos dessa leva usam esse clima em vez do automático."
-          />
-        </span>
-        <div className="flex gap-2 flex-wrap">
-          {MUSIC_MOOD_OPTIONS.map((m) => (
-            <Pill key={m.id} selected={wizard.musicMood === m.id} onClick={() => wizard.setMusicMood(m.id)}>
-              {m.label}
-            </Pill>
-          ))}
-        </div>
-      </div>
+      )}
 
       <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
         <FieldLabel>
