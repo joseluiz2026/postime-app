@@ -46,6 +46,10 @@ type StyleRenderConfig = {
 };
 
 const DEFAULT_STYLE = "Minimalista";
+// When there's background music, the video runs this much longer than the
+// narration/captions so the music keeps playing after the speech ends, then
+// fades out — instead of cutting off right when the talking stops.
+const MUSIC_OUTRO_SECONDS = 3;
 
 const STYLE_CONFIGS: Record<string, StyleRenderConfig> = {
   Minimalista: {
@@ -141,13 +145,14 @@ function getCaptionFontPath(): string {
 function buildMultiImageChain(opts: {
   imageCount: number;
   duration: number;
+  outroSeconds: number;
   fps: number;
   cfg: StyleRenderConfig;
 }): { lines: string[]; outLabel: string } {
-  const { imageCount: n, duration, fps, cfg } = opts;
+  const { imageCount: n, duration, outroSeconds, fps, cfg } = opts;
 
   if (n <= 1) {
-    const frames = Math.max(1, Math.round(duration * fps));
+    const frames = Math.max(1, Math.round((duration + outroSeconds) * fps));
     return {
       lines: [
         `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
@@ -160,17 +165,20 @@ function buildMultiImageChain(opts: {
   // Each source clip is rendered slightly longer than its "solo" segment so the tail
   // can crossfade into the next clip's head; xfade then consumes that overlap. The
   // combined timeline ends up a hair longer than `duration`, trimmed off by -t later.
+  // The last clip additionally gets `outroSeconds` of extra frames so the picture
+  // keeps moving during the music-only tail instead of running out of video.
   const segDur = duration / n;
   const td = Math.min(cfg.transitionDur, segDur * 0.6);
   const clipDur = segDur + td;
   const frames = Math.max(1, Math.round(clipDur * fps));
+  const lastFrames = Math.max(1, Math.round((clipDur + outroSeconds) * fps));
   const zoomRate = 0.004;
 
   const lines: string[] = [];
   for (let i = 0; i < n; i++) {
     lines.push(
       `[${i}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
-        `zoompan=z='min(zoom+${zoomRate},1.3)':d=${frames}:s=1080x1920:fps=${fps}[img${i}]`,
+        `zoompan=z='min(zoom+${zoomRate},1.3)':d=${i === n - 1 ? lastFrames : frames}:s=1080x1920:fps=${fps}[img${i}]`,
     );
   }
 
@@ -251,7 +259,10 @@ async function buildCaptionChain(opts: {
  * Optional burned-in captions are synced to the narration via proportional
  * text-time splitting (no forced-alignment step exists in this pipeline). An
  * optional background music track is looped/trimmed to match, faded in/out,
- * and mixed under the narration (fixed-level mix, not dynamic ducking).
+ * and mixed under the narration (fixed-level mix, not dynamic ducking). When
+ * music is present the video runs `MUSIC_OUTRO_SECONDS` longer than the
+ * narration/captions — the picture keeps moving and the music keeps playing
+ * (then fades out) instead of cutting off the instant the speech ends.
  *
  * `audioPath` (narration) is optional: when there's no recorded narration,
  * `durationSeconds` must be supplied instead (typically an estimate from the
@@ -274,6 +285,8 @@ export async function renderKenBurnsVideo(opts: {
   }
 
   const duration = opts.durationSeconds ?? (await probeDurationSeconds(opts.audioPath!));
+  const outroSeconds = opts.musicPath ? MUSIC_OUTRO_SECONDS : 0;
+  const outputDuration = duration + outroSeconds;
   const fps = 25;
   const workDir = path.dirname(opts.outputPath);
   const cfg = STYLE_CONFIGS[opts.style ?? DEFAULT_STYLE] ?? STYLE_CONFIGS[DEFAULT_STYLE];
@@ -281,6 +294,7 @@ export async function renderKenBurnsVideo(opts: {
   const { lines: imageLines, outLabel: imagesOutLabel } = buildMultiImageChain({
     imageCount: opts.imagePaths.length,
     duration,
+    outroSeconds,
     fps,
     cfg,
   });
@@ -326,9 +340,9 @@ export async function renderKenBurnsVideo(opts: {
   }
 
   let audioMapSpec: string;
-  const musicDur = duration.toFixed(3);
+  const musicDur = outputDuration.toFixed(3);
   const musicFadeSeconds = 2;
-  const fadeOutStart = Math.max(0, duration - musicFadeSeconds).toFixed(3);
+  const fadeOutStart = Math.max(0, outputDuration - musicFadeSeconds).toFixed(3);
 
   if (narrationInputIndex !== null && musicInputIndex !== null) {
     filterLines.push(
@@ -336,7 +350,10 @@ export async function renderKenBurnsVideo(opts: {
         `afade=t=in:st=0:d=${musicFadeSeconds},afade=t=out:st=${fadeOutStart}:d=${musicFadeSeconds}[music]`,
     );
     filterLines.push(
-      `[${narrationInputIndex}:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`,
+      // duration=longest (not "first"): music now intentionally outlasts the
+      // narration by outroSeconds, so the mix must follow music's length, not
+      // cut off the moment the narration track ends.
+      `[${narrationInputIndex}:a][music]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]`,
     );
     audioMapSpec = "[aout]";
   } else if (narrationInputIndex !== null) {
@@ -368,7 +385,7 @@ export async function renderKenBurnsVideo(opts: {
     "-c:a",
     "aac",
     "-t",
-    String(duration),
+    String(outputDuration),
     opts.outputPath,
   );
 
@@ -383,5 +400,5 @@ export async function renderKenBurnsVideo(opts: {
     });
   });
 
-  return duration;
+  return outputDuration;
 }
