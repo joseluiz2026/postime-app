@@ -380,12 +380,15 @@ export async function renderKenBurnsVideo(opts: {
     audioMapSpec = `${silentInputIndex}:a`;
   }
 
-  const scriptPath = path.join(workDir, "filtergraph.txt");
-  await writeFile(scriptPath, filterLines.join(";\n"), "utf8");
-
   args.push(
-    "-filter_complex_script",
-    scriptPath,
+    // Passed inline rather than via -filter_complex_script/-/filter_complex:
+    // the "_script" flag was removed in newer ffmpeg builds (including the
+    // vendored Linux binary) in favor of "-/filter_complex", but that syntax
+    // doesn't exist yet in older builds (including the local Windows dev
+    // binary) — plain "-filter_complex <graph>" has been stable across every
+    // ffmpeg version and works on both.
+    "-filter_complex",
+    filterLines.join(";\n"),
     "-map",
     `[${outLabel}]`,
     "-map",
