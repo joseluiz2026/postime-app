@@ -36,6 +36,7 @@ export type SceneSeconds = 1 | 2 | 3 | 4 | 5;
 export type MusicMoodSelection = MusicMood | "auto";
 export type CaptionColor = "auto" | "white" | "black" | "yellow" | "red";
 export type CaptionSize = "small" | "medium" | "large";
+export type CaptionFont = "poppins" | "anton" | "archivoblack";
 
 export type OwnImage = { name: string; url: string; path: string };
 export type Roteiro = { meta: string; text: string; mood?: MusicMood };
@@ -136,6 +137,7 @@ type WizardState = {
   musicMoodByTema: MusicMoodSelection[];
   captionColor: CaptionColor;
   captionSize: CaptionSize;
+  captionFont: CaptionFont;
 
   // download
   videos: Video[];
@@ -184,6 +186,7 @@ type WizardContextValue = WizardState & {
   setSelectedStyle: (s: StyleName) => void;
   setCaptionColor: (c: CaptionColor) => void;
   setCaptionSize: (s: CaptionSize) => void;
+  setCaptionFont: (f: CaptionFont) => void;
   setSceneSecondsForTema: (idx: number, s: SceneSeconds) => void;
   setMusicMoodForTema: (idx: number, m: MusicMoodSelection) => void;
   confirmBuild: () => Promise<boolean>;
@@ -264,6 +267,7 @@ export function WizardProvider({
   const [selectedStyle, setSelectedStyle] = useState<StyleName>("Minimalista");
   const [captionColor, setCaptionColor] = useState<CaptionColor>("auto");
   const [captionSize, setCaptionSize] = useState<CaptionSize>("medium");
+  const [captionFont, setCaptionFont] = useState<CaptionFont>("poppins");
   const [sceneSecondsByTema, setSceneSecondsByTema] = useState<SceneSeconds[]>([]);
   const [musicMoodByTema, setMusicMoodByTema] = useState<MusicMoodSelection[]>([]);
 
@@ -655,6 +659,7 @@ export function WizardProvider({
                   sceneSeconds: sceneSecondsByTema[i] ?? 3,
                   captionColor,
                   captionSize,
+                  captionFont,
                 }),
               });
               const renderData = await renderRes.json();
@@ -699,6 +704,7 @@ export function WizardProvider({
     musicMoodByTema,
     captionColor,
     captionSize,
+    captionFont,
     sourceLabel,
     applyVideos,
     roteiros,
@@ -821,6 +827,7 @@ export function WizardProvider({
       musicMoodByTema,
       captionColor,
       captionSize,
+      captionFont,
       videos,
       videoCountStatus,
       buildingVideos,
@@ -859,6 +866,7 @@ export function WizardProvider({
       setSelectedStyle,
       setCaptionColor,
       setCaptionSize,
+      setCaptionFont,
       setSceneSecondsForTema,
       setMusicMoodForTema,
       confirmBuild,
@@ -908,6 +916,7 @@ export function WizardProvider({
       musicMoodByTema,
       captionColor,
       captionSize,
+      captionFont,
       videos,
       videoCountStatus,
       buildingVideos,

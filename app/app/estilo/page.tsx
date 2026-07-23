@@ -6,6 +6,7 @@ import { Icon } from "@/lib/icons";
 import {
   useWizard,
   type CaptionColor,
+  type CaptionFont,
   type CaptionSize,
   type MusicMoodSelection,
   type SceneSeconds,
@@ -35,6 +36,12 @@ const CAPTION_SIZE_OPTIONS: { id: CaptionSize; label: string }[] = [
   { id: "small", label: "Pequena" },
   { id: "medium", label: "Média" },
   { id: "large", label: "Grande" },
+];
+
+const CAPTION_FONT_OPTIONS: { id: CaptionFont; label: string }[] = [
+  { id: "poppins", label: "Arredondada" },
+  { id: "anton", label: "Impacto" },
+  { id: "archivoblack", label: "Moderna" },
 ];
 
 const STYLES: { name: StyleName; desc: string; preview: React.ReactNode }[] = [
@@ -201,10 +208,18 @@ export default function EstiloPage() {
           ))}
         </div>
         <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Tamanho da legenda</span>
-        <div className="flex gap-2">
+        <div className="flex gap-2 mb-4">
           {CAPTION_SIZE_OPTIONS.map((s) => (
             <Pill key={s.id} selected={wizard.captionSize === s.id} onClick={() => wizard.setCaptionSize(s.id)}>
               {s.label}
+            </Pill>
+          ))}
+        </div>
+        <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Fonte da legenda</span>
+        <div className="flex gap-2">
+          {CAPTION_FONT_OPTIONS.map((f) => (
+            <Pill key={f.id} selected={wizard.captionFont === f.id} onClick={() => wizard.setCaptionFont(f.id)}>
+              {f.label}
             </Pill>
           ))}
         </div>

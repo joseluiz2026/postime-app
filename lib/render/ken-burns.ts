@@ -59,16 +59,28 @@ type StyleRenderConfig = {
 
 const DEFAULT_STYLE = "Minimalista";
 // Caption line-wrap budget: the 1080px canvas minus side margins, divided by
-// an estimated average glyph width for Poppins Bold (drawtext has no
-// built-in word-wrap, so without this long phrases run past the frame edges).
+// an estimated average glyph width for the selected caption font (drawtext has
+// no built-in word-wrap, so without this long phrases run past the frame edges).
 const CAPTION_MAX_WIDTH_PX = 900;
-const AVG_CHAR_WIDTH_RATIO = 0.56;
-const AVG_CHAR_WIDTH_RATIO_UPPERCASE = 0.62;
 
 const CAPTION_SIZE_MULTIPLIERS: Record<string, number> = { small: 0.8, medium: 1, large: 1.25 };
 // Plain ffmpeg-recognized color names — no need for hex, and these read fine
 // as classic subtitle colors regardless of the app's own UI theme.
 const CAPTION_COLOR_MAP: Record<string, string> = { white: "white", black: "black", yellow: "yellow", red: "red" };
+const CAPTION_FONT_FILES: Record<string, string> = {
+  poppins: "Poppins-Bold.ttf",
+  anton: "Anton-Regular.ttf",
+  archivoblack: "ArchivoBlack-Regular.ttf",
+};
+// Per-font glyph-width estimate used for the same wrap-budget math as Poppins
+// (see CAPTION_MAX_WIDTH_PX above). Anton is a condensed display face (narrower
+// glyphs than Poppins Bold); Archivo Black is a wide/heavy face (wider glyphs).
+// Erring high on the wider fonts keeps the safety margin against edge overflow.
+const CAPTION_FONT_WIDTH_RATIOS: Record<string, { normal: number; uppercase: number }> = {
+  poppins: { normal: 0.56, uppercase: 0.62 },
+  anton: { normal: 0.48, uppercase: 0.5 },
+  archivoblack: { normal: 0.62, uppercase: 0.66 },
+};
 // When there's background music, the video runs this much longer than the
 // narration/captions so the music keeps playing after the speech ends, then
 // fades out — instead of cutting off right when the talking stops.
@@ -161,8 +173,9 @@ const STYLE_CONFIGS: Record<string, StyleRenderConfig> = {
   },
 };
 
-function getCaptionFontPath(): string {
-  return path.join(process.cwd(), "public", "fonts", "Poppins-Bold.ttf");
+function getCaptionFontPath(font?: string): string {
+  const file = (font && CAPTION_FONT_FILES[font]) || CAPTION_FONT_FILES.poppins;
+  return path.join(process.cwd(), "public", "fonts", file);
 }
 
 function buildMultiImageChain(opts: {
@@ -226,10 +239,12 @@ async function buildCaptionChain(opts: {
   inLabel: string;
   captionColor?: string;
   captionSize?: string;
+  captionFont?: string;
 }): Promise<{ lines: string[]; outLabel: string }> {
   const cfg = STYLE_CONFIGS[opts.style] ?? STYLE_CONFIGS[DEFAULT_STYLE];
   const fontsize = Math.round(cfg.fontsize * (CAPTION_SIZE_MULTIPLIERS[opts.captionSize ?? "medium"] ?? 1));
   const fontcolor = (opts.captionColor && CAPTION_COLOR_MAP[opts.captionColor]) || cfg.fontcolor;
+  const widthRatios = CAPTION_FONT_WIDTH_RATIOS[opts.captionFont ?? "poppins"] ?? CAPTION_FONT_WIDTH_RATIOS.poppins;
   const segments = buildCaptionSegments(opts.text, opts.duration, cfg.mode);
   const lines: string[] = [];
   let cur = opts.inLabel;
@@ -240,14 +255,14 @@ async function buildCaptionChain(opts: {
     cur = "lb1";
   }
 
-  const fontEsc = escapeFilterPath(getCaptionFontPath());
+  const fontEsc = escapeFilterPath(getCaptionFontPath(opts.captionFont));
 
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
     if (seg.end - seg.start < 0.02) continue;
 
     const raw = cfg.uppercase ? segments[i].text.toUpperCase() : segments[i].text;
-    const charWidthRatio = cfg.uppercase ? AVG_CHAR_WIDTH_RATIO_UPPERCASE : AVG_CHAR_WIDTH_RATIO;
+    const charWidthRatio = cfg.uppercase ? widthRatios.uppercase : widthRatios.normal;
     const maxCharsPerLine = Math.max(6, Math.floor(CAPTION_MAX_WIDTH_PX / (fontsize * charWidthRatio)));
     // Word mode already burns one word at a time, so there's nothing to wrap.
     const displayText = cfg.mode === "word" ? raw : wrapCaptionText(raw, maxCharsPerLine);
@@ -315,6 +330,7 @@ export async function renderKenBurnsVideo(opts: {
   style?: string;
   captionColor?: string;
   captionSize?: string;
+  captionFont?: string;
   durationSeconds?: number;
   musicPath?: string;
 }): Promise<number> {
@@ -350,6 +366,7 @@ export async function renderKenBurnsVideo(opts: {
       inLabel: imagesOutLabel,
       captionColor: opts.captionColor,
       captionSize: opts.captionSize,
+      captionFont: opts.captionFont,
     });
     filterLines.push(...chain.lines);
     outLabel = chain.outLabel;
