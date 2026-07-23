@@ -2,9 +2,14 @@ import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
 import { NextResponse } from "next/server";
-import { renderKenBurnsVideo } from "@/lib/render/ken-burns";
+import { probeDurationSeconds, renderKenBurnsVideo } from "@/lib/render/ken-burns";
+import { splitTextIntoChunks } from "@/lib/render/captions";
+import { searchPexelsImage } from "@/lib/images/pexels";
 import { createClient } from "@/lib/supabase/server";
 import { dailyVideoLimitFor, getAccessPhase } from "@/lib/plan";
+
+const IMAGE_SEGMENT_SECONDS = 3;
+const MAX_IMAGE_SEGMENTS = 12;
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -67,18 +72,50 @@ export async function POST(request: Request) {
     const audioFile = path.join(dir, `audio.${audioExt}`);
     await writeFile(audioFile, Buffer.from(await audioBlob.arrayBuffer()));
 
-    const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) throw new Error("image_download_failed");
-    const imageFile = path.join(dir, "image.jpg");
-    await writeFile(imageFile, Buffer.from(await imgRes.arrayBuffer()));
+    const duration = await probeDurationSeconds(audioFile);
+    const numSegments = Math.max(
+      1,
+      Math.min(MAX_IMAGE_SEGMENTS, Math.round(duration / IMAGE_SEGMENT_SECONDS)),
+    );
+
+    // First segment reuses the already-fetched cover image (keeps the video's opening
+    // frame consistent with the thumbnail shown in the UI); extra segments get their
+    // own Pexels image, one per text chunk, so each ~3s image relates to that part of
+    // the narration.
+    const imageUrls = [imageUrl];
+    if (numSegments > 1 && captionText) {
+      const chunks = splitTextIntoChunks(captionText, numSegments);
+      const extra = await Promise.all(
+        chunks.slice(1).map(async (chunk) => {
+          try {
+            const found = await searchPexelsImage(chunk);
+            return found?.url ?? null;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      for (const url of extra) imageUrls.push(url ?? imageUrl);
+    }
+
+    const imageFiles = await Promise.all(
+      imageUrls.map(async (url, i) => {
+        const imgRes = await fetch(url);
+        if (!imgRes.ok) throw new Error("image_download_failed");
+        const imageFile = path.join(dir, `image${i}.jpg`);
+        await writeFile(imageFile, Buffer.from(await imgRes.arrayBuffer()));
+        return imageFile;
+      }),
+    );
 
     const outputFile = path.join(dir, "output.mp4");
     const durationSeconds = await renderKenBurnsVideo({
-      imagePath: imageFile,
+      imagePaths: imageFiles,
       audioPath: audioFile,
       outputPath: outputFile,
       captionText,
       style,
+      durationSeconds: duration,
     });
 
     const videoBuffer = await readFile(outputFile);

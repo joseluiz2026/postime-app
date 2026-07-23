@@ -5,7 +5,7 @@ import ffmpegPath from "ffmpeg-static";
 import { path as ffprobePath } from "ffprobe-static";
 import { buildCaptionSegments, escapeFilterPath } from "./captions";
 
-function probeDurationSeconds(filePath: string): Promise<number> {
+export function probeDurationSeconds(filePath: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const proc = spawn(ffprobePath, [
       "-v",
@@ -30,7 +30,7 @@ function probeDurationSeconds(filePath: string): Promise<number> {
   });
 }
 
-type CaptionStyleConfig = {
+type StyleRenderConfig = {
   mode: "phrase" | "word";
   fontsize: number;
   fontcolor: string;
@@ -41,11 +41,13 @@ type CaptionStyleConfig = {
   rise: number;
   letterbox: boolean;
   uppercase: boolean;
+  transition: string;
+  transitionDur: number;
 };
 
 const DEFAULT_STYLE = "Minimalista";
 
-const CAPTION_STYLES: Record<string, CaptionStyleConfig> = {
+const STYLE_CONFIGS: Record<string, StyleRenderConfig> = {
   Minimalista: {
     mode: "phrase",
     fontsize: 58,
@@ -57,6 +59,8 @@ const CAPTION_STYLES: Record<string, CaptionStyleConfig> = {
     rise: 0,
     letterbox: false,
     uppercase: false,
+    transition: "fade",
+    transitionDur: 0.4,
   },
   "Dinâmico": {
     mode: "phrase",
@@ -69,6 +73,8 @@ const CAPTION_STYLES: Record<string, CaptionStyleConfig> = {
     rise: 16,
     letterbox: false,
     uppercase: false,
+    transition: "slideleft",
+    transitionDur: 0.3,
   },
   "Cinematográfico": {
     mode: "phrase",
@@ -81,6 +87,8 @@ const CAPTION_STYLES: Record<string, CaptionStyleConfig> = {
     rise: 0,
     letterbox: true,
     uppercase: false,
+    transition: "fade",
+    transitionDur: 0.6,
   },
   "Neon Bold": {
     mode: "phrase",
@@ -93,6 +101,8 @@ const CAPTION_STYLES: Record<string, CaptionStyleConfig> = {
     rise: 0,
     letterbox: false,
     uppercase: true,
+    transition: "circleopen",
+    transitionDur: 0.4,
   },
   "Kinetic Text": {
     mode: "word",
@@ -105,6 +115,8 @@ const CAPTION_STYLES: Record<string, CaptionStyleConfig> = {
     rise: 28,
     letterbox: false,
     uppercase: false,
+    transition: "fade",
+    transitionDur: 0.25,
   },
   "Split Screen": {
     mode: "phrase",
@@ -117,11 +129,62 @@ const CAPTION_STYLES: Record<string, CaptionStyleConfig> = {
     rise: 0,
     letterbox: false,
     uppercase: false,
+    transition: "wipeup",
+    transitionDur: 0.4,
   },
 };
 
 function getCaptionFontPath(): string {
   return path.join(process.cwd(), "public", "fonts", "Poppins-Bold.ttf");
+}
+
+function buildMultiImageChain(opts: {
+  imageCount: number;
+  duration: number;
+  fps: number;
+  cfg: StyleRenderConfig;
+}): { lines: string[]; outLabel: string } {
+  const { imageCount: n, duration, fps, cfg } = opts;
+
+  if (n <= 1) {
+    const frames = Math.max(1, Math.round(duration * fps));
+    return {
+      lines: [
+        `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
+          `zoompan=z='min(zoom+0.0015,1.3)':d=${frames}:s=1080x1920:fps=${fps}[base]`,
+      ],
+      outLabel: "base",
+    };
+  }
+
+  // Each source clip is rendered slightly longer than its "solo" segment so the tail
+  // can crossfade into the next clip's head; xfade then consumes that overlap. The
+  // combined timeline ends up a hair longer than `duration`, trimmed off by -t later.
+  const segDur = duration / n;
+  const td = Math.min(cfg.transitionDur, segDur * 0.6);
+  const clipDur = segDur + td;
+  const frames = Math.max(1, Math.round(clipDur * fps));
+  const zoomRate = 0.004;
+
+  const lines: string[] = [];
+  for (let i = 0; i < n; i++) {
+    lines.push(
+      `[${i}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
+        `zoompan=z='min(zoom+${zoomRate},1.3)':d=${frames}:s=1080x1920:fps=${fps}[img${i}]`,
+    );
+  }
+
+  let cur = "img0";
+  for (let i = 1; i < n; i++) {
+    const offset = (i * segDur).toFixed(3);
+    const out = i === n - 1 ? "base" : `x${i}`;
+    lines.push(
+      `[${cur}][img${i}]xfade=transition=${cfg.transition}:duration=${td.toFixed(3)}:offset=${offset}[${out}]`,
+    );
+    cur = out;
+  }
+
+  return { lines, outLabel: "base" };
 }
 
 async function buildCaptionChain(opts: {
@@ -131,7 +194,7 @@ async function buildCaptionChain(opts: {
   workDir: string;
   inLabel: string;
 }): Promise<{ lines: string[]; outLabel: string }> {
-  const cfg = CAPTION_STYLES[opts.style] ?? CAPTION_STYLES[DEFAULT_STYLE];
+  const cfg = STYLE_CONFIGS[opts.style] ?? STYLE_CONFIGS[DEFAULT_STYLE];
   const segments = buildCaptionSegments(opts.text, opts.duration, cfg.mode);
   const lines: string[] = [];
   let cur = opts.inLabel;
@@ -182,29 +245,37 @@ async function buildCaptionChain(opts: {
 }
 
 /**
- * Renders a single still image into a vertical (1080x1920) Ken Burns zoom-in
- * video, muxed with the given audio track, with optional burned-in captions
- * synced to the audio via proportional text-time splitting (no forced-alignment
- * step exists in this pipeline). Video duration matches the audio.
- * Returns the resulting duration in seconds.
+ * Renders one or more still images into a vertical (1080x1920) Ken Burns video
+ * muxed with the given audio track. With more than one image, each gets its own
+ * ~equal-length segment and consecutive segments crossfade (transition style
+ * depends on `style`). Optional burned-in captions are synced to the audio via
+ * proportional text-time splitting (no forced-alignment step exists in this
+ * pipeline). Video duration matches the audio. Returns the duration in seconds.
  */
 export async function renderKenBurnsVideo(opts: {
-  imagePath: string;
+  imagePaths: string[];
   audioPath: string;
   outputPath: string;
   captionText?: string;
   style?: string;
+  durationSeconds?: number;
 }): Promise<number> {
-  const duration = await probeDurationSeconds(opts.audioPath);
-  const fps = 25;
-  const frames = Math.max(1, Math.round(duration * fps));
-  const workDir = path.dirname(opts.outputPath);
+  if (opts.imagePaths.length === 0) throw new Error("renderKenBurnsVideo: no images provided");
 
-  const filterLines = [
-    `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
-      `zoompan=z='min(zoom+0.0015,1.3)':d=${frames}:s=1080x1920:fps=${fps}[base]`,
-  ];
-  let outLabel = "base";
+  const duration = opts.durationSeconds ?? (await probeDurationSeconds(opts.audioPath));
+  const fps = 25;
+  const workDir = path.dirname(opts.outputPath);
+  const cfg = STYLE_CONFIGS[opts.style ?? DEFAULT_STYLE] ?? STYLE_CONFIGS[DEFAULT_STYLE];
+
+  const { lines: imageLines, outLabel: imagesOutLabel } = buildMultiImageChain({
+    imageCount: opts.imagePaths.length,
+    duration,
+    fps,
+    cfg,
+  });
+
+  const filterLines = [...imageLines];
+  let outLabel = imagesOutLabel;
 
   if (opts.captionText && opts.captionText.trim()) {
     const chain = await buildCaptionChain({
@@ -212,7 +283,7 @@ export async function renderKenBurnsVideo(opts: {
       duration,
       style: opts.style ?? DEFAULT_STYLE,
       workDir,
-      inLabel: "base",
+      inLabel: imagesOutLabel,
     });
     filterLines.push(...chain.lines);
     outLabel = chain.outLabel;
@@ -221,31 +292,33 @@ export async function renderKenBurnsVideo(opts: {
   const scriptPath = path.join(workDir, "filtergraph.txt");
   await writeFile(scriptPath, filterLines.join(";\n"), "utf8");
 
+  const audioInputIndex = opts.imagePaths.length;
+  const args: string[] = ["-y"];
+  for (const imagePath of opts.imagePaths) {
+    args.push("-loop", "1", "-i", imagePath);
+  }
+  args.push(
+    "-i",
+    opts.audioPath,
+    "-filter_complex_script",
+    scriptPath,
+    "-map",
+    `[${outLabel}]`,
+    "-map",
+    `${audioInputIndex}:a`,
+    "-c:v",
+    "libx264",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-t",
+    String(duration),
+    opts.outputPath,
+  );
+
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn(ffmpegPath as string, [
-      "-y",
-      "-loop",
-      "1",
-      "-i",
-      opts.imagePath,
-      "-i",
-      opts.audioPath,
-      "-filter_complex_script",
-      scriptPath,
-      "-map",
-      `[${outLabel}]`,
-      "-map",
-      "1:a",
-      "-c:v",
-      "libx264",
-      "-pix_fmt",
-      "yuv420p",
-      "-c:a",
-      "aac",
-      "-t",
-      String(duration),
-      opts.outputPath,
-    ]);
+    const proc = spawn(ffmpegPath as string, args);
     let stderr = "";
     proc.stderr.on("data", (d) => (stderr += d));
     proc.on("error", reject);

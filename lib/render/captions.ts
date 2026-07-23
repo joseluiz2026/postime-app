@@ -49,3 +49,29 @@ function groupWords(words: string[], size: number): string[] {
 export function escapeFilterPath(p: string): string {
   return p.replace(/\\/g, "/").replace(/:/g, "\\:");
 }
+
+/**
+ * Evenly splits narration text into `n` word-count-balanced chunks, used to derive
+ * one image search query per ~3s image segment (unrelated to caption timing, which
+ * uses buildCaptionSegments instead — the two run at different granularities).
+ */
+export function splitTextIntoChunks(text: string, n: number): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0 || n <= 0) return [];
+  if (n === 1) return [words.join(" ")];
+
+  const base = Math.floor(words.length / n);
+  const extra = words.length % n;
+  const chunks: string[] = [];
+  let idx = 0;
+  for (let i = 0; i < n; i++) {
+    const size = base + (i < extra ? 1 : 0);
+    if (size === 0) {
+      chunks.push(chunks[chunks.length - 1] ?? words.join(" "));
+      continue;
+    }
+    chunks.push(words.slice(idx, idx + size).join(" "));
+    idx += size;
+  }
+  return chunks;
+}
