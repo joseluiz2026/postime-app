@@ -11,6 +11,8 @@ import { dailyVideoLimitFor, getAccessPhase } from "@/lib/plan";
 
 const ALLOWED_SCENE_SECONDS = [1, 2, 3, 4, 5] as const;
 const DEFAULT_SCENE_SECONDS = 3;
+const ALLOWED_CAPTION_COLORS = ["auto", "white", "black", "yellow", "red"] as const;
+const ALLOWED_CAPTION_SIZES = ["small", "medium", "large"] as const;
 const MAX_IMAGE_SEGMENTS = 30;
 // Padding added to narration/caption duration before splitting into scenes — gives
 // the scene count a little slack instead of exactly matching the spoken content.
@@ -60,6 +62,8 @@ export async function POST(request: Request) {
   const sceneSeconds = ALLOWED_SCENE_SECONDS.includes(body?.sceneSeconds)
     ? (body.sceneSeconds as number)
     : DEFAULT_SCENE_SECONDS;
+  const captionColor = ALLOWED_CAPTION_COLORS.includes(body?.captionColor) ? (body.captionColor as string) : "auto";
+  const captionSize = ALLOWED_CAPTION_SIZES.includes(body?.captionSize) ? (body.captionSize as string) : "medium";
   const hasAudio = audioPath.length > 0;
   if ((hasAudio && !audioPath.startsWith(`${user.id}/`)) || !/^https:\/\//.test(imageUrl)) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
@@ -138,6 +142,8 @@ export async function POST(request: Request) {
       durationSeconds: duration,
       captionText,
       style,
+      captionColor: captionColor === "auto" ? undefined : captionColor,
+      captionSize,
       musicPath: musicPath ?? undefined,
     });
 

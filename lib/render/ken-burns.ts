@@ -64,6 +64,11 @@ const DEFAULT_STYLE = "Minimalista";
 const CAPTION_MAX_WIDTH_PX = 900;
 const AVG_CHAR_WIDTH_RATIO = 0.56;
 const AVG_CHAR_WIDTH_RATIO_UPPERCASE = 0.62;
+
+const CAPTION_SIZE_MULTIPLIERS: Record<string, number> = { small: 0.8, medium: 1, large: 1.25 };
+// Plain ffmpeg-recognized color names — no need for hex, and these read fine
+// as classic subtitle colors regardless of the app's own UI theme.
+const CAPTION_COLOR_MAP: Record<string, string> = { white: "white", black: "black", yellow: "yellow", red: "red" };
 // When there's background music, the video runs this much longer than the
 // narration/captions so the music keeps playing after the speech ends, then
 // fades out — instead of cutting off right when the talking stops.
@@ -219,8 +224,12 @@ async function buildCaptionChain(opts: {
   style: string;
   workDir: string;
   inLabel: string;
+  captionColor?: string;
+  captionSize?: string;
 }): Promise<{ lines: string[]; outLabel: string }> {
   const cfg = STYLE_CONFIGS[opts.style] ?? STYLE_CONFIGS[DEFAULT_STYLE];
+  const fontsize = Math.round(cfg.fontsize * (CAPTION_SIZE_MULTIPLIERS[opts.captionSize ?? "medium"] ?? 1));
+  const fontcolor = (opts.captionColor && CAPTION_COLOR_MAP[opts.captionColor]) || cfg.fontcolor;
   const segments = buildCaptionSegments(opts.text, opts.duration, cfg.mode);
   const lines: string[] = [];
   let cur = opts.inLabel;
@@ -239,7 +248,7 @@ async function buildCaptionChain(opts: {
 
     const raw = cfg.uppercase ? segments[i].text.toUpperCase() : segments[i].text;
     const charWidthRatio = cfg.uppercase ? AVG_CHAR_WIDTH_RATIO_UPPERCASE : AVG_CHAR_WIDTH_RATIO;
-    const maxCharsPerLine = Math.max(6, Math.floor(CAPTION_MAX_WIDTH_PX / (cfg.fontsize * charWidthRatio)));
+    const maxCharsPerLine = Math.max(6, Math.floor(CAPTION_MAX_WIDTH_PX / (fontsize * charWidthRatio)));
     // Word mode already burns one word at a time, so there's nothing to wrap.
     const displayText = cfg.mode === "word" ? raw : wrapCaptionText(raw, maxCharsPerLine);
     const txtPath = path.join(opts.workDir, `cap_${i}.txt`);
@@ -253,14 +262,20 @@ async function buildCaptionChain(opts: {
     const parts = [
       `fontfile='${fontEsc}'`,
       `textfile='${txtEsc}'`,
-      `fontsize=${cfg.fontsize}`,
-      `fontcolor=${cfg.fontcolor}`,
+      `fontsize=${fontsize}`,
+      `fontcolor=${fontcolor}`,
       `x=(w-text_w)/2`,
       cfg.rise > 0
         ? `y='${cfg.y}+(1-min((t-${start})/0.12,1))*${cfg.rise}'`
         : `y='${cfg.y}'`,
     ];
-    if (cfg.box) parts.push(`box=1`, `boxcolor=${cfg.boxcolor}`, `boxborderw=${cfg.boxborderw}`);
+    if (cfg.box) {
+      // A style's default box is usually a dark translucent panel — if the
+      // user picked black caption text on top of it, swap to a light panel
+      // so the text doesn't disappear against its own background.
+      const boxcolor = fontcolor === "black" && cfg.boxcolor.includes("black") ? "white@0.75" : cfg.boxcolor;
+      parts.push(`box=1`, `boxcolor=${boxcolor}`, `boxborderw=${cfg.boxborderw}`);
+    }
     parts.push(
       `alpha='if(lt(t,${start}+${fade}),(t-${start})/${fade},if(gt(t,${end}-${fade}),(${end}-t)/${fade},1))'`,
       `enable='between(t,${start},${end})'`,
@@ -298,6 +313,8 @@ export async function renderKenBurnsVideo(opts: {
   outputPath: string;
   captionText?: string;
   style?: string;
+  captionColor?: string;
+  captionSize?: string;
   durationSeconds?: number;
   musicPath?: string;
 }): Promise<number> {
@@ -331,6 +348,8 @@ export async function renderKenBurnsVideo(opts: {
       style: opts.style ?? DEFAULT_STYLE,
       workDir,
       inLabel: imagesOutLabel,
+      captionColor: opts.captionColor,
+      captionSize: opts.captionSize,
     });
     filterLines.push(...chain.lines);
     outLabel = chain.outLabel;

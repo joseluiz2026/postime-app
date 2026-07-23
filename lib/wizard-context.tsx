@@ -34,6 +34,8 @@ export type StyleName =
   | "Split Screen";
 export type SceneSeconds = 1 | 2 | 3 | 4 | 5;
 export type MusicMoodSelection = MusicMood | "auto";
+export type CaptionColor = "auto" | "white" | "black" | "yellow" | "red";
+export type CaptionSize = "small" | "medium" | "large";
 
 export type OwnImage = { name: string; url: string; path: string };
 export type Roteiro = { meta: string; text: string; mood?: MusicMood };
@@ -132,6 +134,8 @@ type WizardState = {
   selectedStyle: StyleName;
   sceneSecondsByTema: SceneSeconds[];
   musicMoodByTema: MusicMoodSelection[];
+  captionColor: CaptionColor;
+  captionSize: CaptionSize;
 
   // download
   videos: Video[];
@@ -178,6 +182,8 @@ type WizardContextValue = WizardState & {
   toggleSelectedForVideo: (idx: number) => void;
 
   setSelectedStyle: (s: StyleName) => void;
+  setCaptionColor: (c: CaptionColor) => void;
+  setCaptionSize: (s: CaptionSize) => void;
   setSceneSecondsForTema: (idx: number, s: SceneSeconds) => void;
   setMusicMoodForTema: (idx: number, m: MusicMoodSelection) => void;
   confirmBuild: () => Promise<boolean>;
@@ -256,6 +262,8 @@ export function WizardProvider({
   const [audioError, setAudioError] = useState<string | null>(null);
 
   const [selectedStyle, setSelectedStyle] = useState<StyleName>("Minimalista");
+  const [captionColor, setCaptionColor] = useState<CaptionColor>("auto");
+  const [captionSize, setCaptionSize] = useState<CaptionSize>("medium");
   const [sceneSecondsByTema, setSceneSecondsByTema] = useState<SceneSeconds[]>([]);
   const [musicMoodByTema, setMusicMoodByTema] = useState<MusicMoodSelection[]>([]);
 
@@ -645,6 +653,8 @@ export function WizardProvider({
                   style: selectedStyle,
                   mood: (musicMoodByTema[i] ?? "auto") === "auto" ? roteiros[i]?.mood : musicMoodByTema[i],
                   sceneSeconds: sceneSecondsByTema[i] ?? 3,
+                  captionColor,
+                  captionSize,
                 }),
               });
               const renderData = await renderRes.json();
@@ -687,6 +697,8 @@ export function WizardProvider({
     selectedStyle,
     sceneSecondsByTema,
     musicMoodByTema,
+    captionColor,
+    captionSize,
     sourceLabel,
     applyVideos,
     roteiros,
@@ -807,6 +819,8 @@ export function WizardProvider({
       selectedStyle,
       sceneSecondsByTema,
       musicMoodByTema,
+      captionColor,
+      captionSize,
       videos,
       videoCountStatus,
       buildingVideos,
@@ -843,6 +857,8 @@ export function WizardProvider({
       skipAudio,
       toggleSelectedForVideo,
       setSelectedStyle,
+      setCaptionColor,
+      setCaptionSize,
       setSceneSecondsForTema,
       setMusicMoodForTema,
       confirmBuild,
@@ -890,6 +906,8 @@ export function WizardProvider({
       selectedStyle,
       sceneSecondsByTema,
       musicMoodByTema,
+      captionColor,
+      captionSize,
       videos,
       videoCountStatus,
       buildingVideos,

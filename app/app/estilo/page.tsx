@@ -3,7 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/lib/icons";
-import { useWizard, type MusicMoodSelection, type SceneSeconds, type StyleName } from "@/lib/wizard-context";
+import {
+  useWizard,
+  type CaptionColor,
+  type CaptionSize,
+  type MusicMoodSelection,
+  type SceneSeconds,
+  type StyleName,
+} from "@/lib/wizard-context";
 import { Btn, Card, Dropzone, FieldLabel, HelpTip, Pill } from "@/components/app/ui";
 
 const SCENE_SECONDS_OPTIONS: SceneSeconds[] = [1, 2, 3, 4, 5];
@@ -14,6 +21,20 @@ const MUSIC_MOOD_OPTIONS: { id: MusicMoodSelection; label: string }[] = [
   { id: "calmo", label: "Calmo" },
   { id: "corporativo", label: "Corporativo" },
   { id: "animado", label: "Animado" },
+];
+
+const CAPTION_COLOR_OPTIONS: { id: CaptionColor; label: string; swatch: string }[] = [
+  { id: "auto", label: "Automático", swatch: "" },
+  { id: "white", label: "Branco", swatch: "#ffffff" },
+  { id: "black", label: "Preto", swatch: "#0b0b0b" },
+  { id: "yellow", label: "Amarelo", swatch: "#facc15" },
+  { id: "red", label: "Vermelho", swatch: "#ef4444" },
+];
+
+const CAPTION_SIZE_OPTIONS: { id: CaptionSize; label: string }[] = [
+  { id: "small", label: "Pequena" },
+  { id: "medium", label: "Média" },
+  { id: "large", label: "Grande" },
 ];
 
 const STYLES: { name: StyleName; desc: string; preview: React.ReactNode }[] = [
@@ -151,6 +172,42 @@ export default function EstiloPage() {
             <span className="text-[11.5px] text-[var(--text-3)] leading-snug">{s.desc}</span>
           </button>
         ))}
+      </div>
+
+      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
+        <span className="block text-xs font-medium text-[var(--text-2)] mb-2">
+          Cor da legenda
+          <HelpTip
+            label="Como funciona o automático"
+            text="No automático, cada Estilo já tem uma cor de texto pensada pra ele. Escolhendo uma cor aqui, ela substitui a cor padrão do estilo em todos os vídeos."
+          />
+        </span>
+        <div className="flex gap-2 flex-wrap mb-4">
+          {CAPTION_COLOR_OPTIONS.map((c) => (
+            <Pill
+              key={c.id}
+              selected={wizard.captionColor === c.id}
+              onClick={() => wizard.setCaptionColor(c.id)}
+              className="flex items-center gap-1.5"
+            >
+              {c.swatch && (
+                <span
+                  className="w-2.5 h-2.5 rounded-full border-[0.5px] border-[var(--line-strong)] shrink-0"
+                  style={{ background: c.swatch }}
+                />
+              )}
+              {c.label}
+            </Pill>
+          ))}
+        </div>
+        <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Tamanho da legenda</span>
+        <div className="flex gap-2">
+          {CAPTION_SIZE_OPTIONS.map((s) => (
+            <Pill key={s.id} selected={wizard.captionSize === s.id} onClick={() => wizard.setCaptionSize(s.id)}>
+              {s.label}
+            </Pill>
+          ))}
+        </div>
       </div>
 
       {n > 0 && (
