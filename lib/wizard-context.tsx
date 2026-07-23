@@ -182,6 +182,7 @@ type WizardContextValue = WizardState & {
   setMusicMoodForTema: (idx: number, m: MusicMoodSelection) => void;
   confirmBuild: () => Promise<boolean>;
   buildingVideos: boolean;
+  buildProgress: { completed: number; total: number } | null;
   buildError: string | null;
 
   clickAutoGenerate: () => void;
@@ -269,6 +270,7 @@ export function WizardProvider({
   const [videos, setVideos] = useState<Video[]>([]);
   const [videoCountStatus, setVideoCountStatus] = useState("");
   const [buildingVideos, setBuildingVideos] = useState(false);
+  const [buildProgress, setBuildProgress] = useState<{ completed: number; total: number } | null>(null);
   const [buildError, setBuildError] = useState<string | null>(null);
   const whatsappPromptShown = useRef(false);
 
@@ -618,6 +620,8 @@ export function WizardProvider({
       ownMatches.forEach((img, i) => imageByIndex.set(i, { url: img.url, photographer: "Sua foto" }));
 
       let dailyLimitHit = false;
+      let completedCount = 0;
+      setBuildProgress({ completed: 0, total: indices.length });
       const built: Omit<Video, "id">[] = await Promise.all(
         indices.map(async (i): Promise<Omit<Video, "id">> => {
           const image = imageByIndex.get(i);
@@ -627,34 +631,39 @@ export function WizardProvider({
             imageUrl: image?.url,
             imageCredit: image?.photographer,
           };
-          const audioPath = audioPaths[i];
-          if (!image?.url || dailyLimitHit) return base;
           try {
-            const renderRes = await fetch("/api/jobs/render", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                audioPath,
-                imageUrl: image.url,
-                text: roteiros[i]?.text ?? "",
-                style: selectedStyle,
-                mood: (musicMoodByTema[i] ?? "auto") === "auto" ? roteiros[i]?.mood : musicMoodByTema[i],
-                sceneSeconds: sceneSecondsByTema[i] ?? 3,
-              }),
-            });
-            const renderData = await renderRes.json();
-            if (!renderRes.ok) {
-              if (renderData?.error === "daily_video_limit_reached") dailyLimitHit = true;
+            const audioPath = audioPaths[i];
+            if (!image?.url || dailyLimitHit) return base;
+            try {
+              const renderRes = await fetch("/api/jobs/render", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  audioPath,
+                  imageUrl: image.url,
+                  text: roteiros[i]?.text ?? "",
+                  style: selectedStyle,
+                  mood: (musicMoodByTema[i] ?? "auto") === "auto" ? roteiros[i]?.mood : musicMoodByTema[i],
+                  sceneSeconds: sceneSecondsByTema[i] ?? 3,
+                }),
+              });
+              const renderData = await renderRes.json();
+              if (!renderRes.ok) {
+                if (renderData?.error === "daily_video_limit_reached") dailyLimitHit = true;
+                return base;
+              }
+              return {
+                ...base,
+                videoUrl: renderData.videoUrl,
+                expiresAt: renderData.expiresAt,
+                durationSeconds: renderData.durationSeconds,
+              };
+            } catch {
               return base;
             }
-            return {
-              ...base,
-              videoUrl: renderData.videoUrl,
-              expiresAt: renderData.expiresAt,
-              durationSeconds: renderData.durationSeconds,
-            };
-          } catch {
-            return base;
+          } finally {
+            completedCount += 1;
+            setBuildProgress({ completed: completedCount, total: indices.length });
           }
         }),
       );
@@ -670,6 +679,7 @@ export function WizardProvider({
       setBuildError("Falha de conexão. Tente novamente.");
       return false;
     } finally {
+      setBuildProgress(null);
       setBuildingVideos(false);
     }
   }, [
@@ -800,6 +810,7 @@ export function WizardProvider({
       videos,
       videoCountStatus,
       buildingVideos,
+      buildProgress,
       buildError,
       modal,
       userEmail,
@@ -882,6 +893,7 @@ export function WizardProvider({
       videos,
       videoCountStatus,
       buildingVideos,
+      buildProgress,
       buildError,
       modal,
       userEmail,

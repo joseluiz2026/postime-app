@@ -309,6 +309,27 @@ export default function EstiloPage() {
           <Icon name={wizard.buildingVideos ? "loader-2" : "arrow-right"} spin={wizard.buildingVideos} />{" "}
           {wizard.buildingVideos ? "Montando vídeo..." : "Confirmar e montar vídeo"}
         </Btn>
+
+        {wizard.buildingVideos && wizard.buildProgress && (
+          <div className="mt-4 max-w-[360px]">
+            <div className="flex justify-between items-center mb-1.5">
+              <span className="text-[12px] text-[var(--text-2)]">
+                {wizard.buildProgress.completed} de {wizard.buildProgress.total} vídeo
+                {wizard.buildProgress.total === 1 ? "" : "s"} pronto
+                {wizard.buildProgress.total === 1 ? "" : "s"}
+              </span>
+              <span className="text-[12px] font-mono text-[var(--text-2)]">
+                {Math.round((wizard.buildProgress.completed / wizard.buildProgress.total) * 100)}%
+              </span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] overflow-hidden">
+              <div
+                className="h-full bg-[var(--gold)] transition-[width] duration-500 ease-out"
+                style={{ width: `${(wizard.buildProgress.completed / wizard.buildProgress.total) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </Card>
   );
