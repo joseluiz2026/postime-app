@@ -32,6 +32,7 @@ export type StyleName =
   | "Neon Bold"
   | "Kinetic Text"
   | "Split Screen";
+export type SceneSeconds = 1 | 2 | 3 | 4 | 5;
 
 export type OwnImage = { name: string; url: string; path: string };
 export type Roteiro = { meta: string; text: string; mood?: MusicMood };
@@ -128,6 +129,7 @@ type WizardState = {
 
   // estilo
   selectedStyle: StyleName;
+  sceneSeconds: SceneSeconds;
 
   // download
   videos: Video[];
@@ -174,6 +176,7 @@ type WizardContextValue = WizardState & {
   toggleSelectedForVideo: (idx: number) => void;
 
   setSelectedStyle: (s: StyleName) => void;
+  setSceneSeconds: (s: SceneSeconds) => void;
   confirmBuild: () => Promise<boolean>;
   buildingVideos: boolean;
   buildError: string | null;
@@ -249,6 +252,7 @@ export function WizardProvider({
   const [audioError, setAudioError] = useState<string | null>(null);
 
   const [selectedStyle, setSelectedStyle] = useState<StyleName>("Minimalista");
+  const [sceneSeconds, setSceneSeconds] = useState<SceneSeconds>(3);
 
   const [videos, setVideos] = useState<Video[]>([]);
   const [videoCountStatus, setVideoCountStatus] = useState("");
@@ -621,6 +625,7 @@ export function WizardProvider({
                 text: roteiros[i]?.text ?? "",
                 style: selectedStyle,
                 mood: roteiros[i]?.mood,
+                sceneSeconds,
               }),
             });
             const renderData = await renderRes.json();
@@ -653,7 +658,16 @@ export function WizardProvider({
     } finally {
       setBuildingVideos(false);
     }
-  }, [selectedForVideo, selectedStyle, sourceLabel, applyVideos, roteiros, audioPaths, matchedOwnImageForRoteiro]);
+  }, [
+    selectedForVideo,
+    selectedStyle,
+    sceneSeconds,
+    sourceLabel,
+    applyVideos,
+    roteiros,
+    audioPaths,
+    matchedOwnImageForRoteiro,
+  ]);
 
   const clickAutoGenerate = useCallback(() => {
     if (accessPhase === "locked") {
@@ -766,6 +780,7 @@ export function WizardProvider({
       audioUploading,
       audioError,
       selectedStyle,
+      sceneSeconds,
       videos,
       videoCountStatus,
       buildingVideos,
@@ -801,6 +816,7 @@ export function WizardProvider({
       skipAudio,
       toggleSelectedForVideo,
       setSelectedStyle,
+      setSceneSeconds,
       confirmBuild,
       clickAutoGenerate,
       connectEleven,
@@ -844,6 +860,7 @@ export function WizardProvider({
       audioUploading,
       audioError,
       selectedStyle,
+      sceneSeconds,
       videos,
       videoCountStatus,
       buildingVideos,

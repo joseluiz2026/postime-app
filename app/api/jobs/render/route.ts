@@ -9,8 +9,12 @@ import { pickMusicTrack } from "@/lib/audio/music-picker";
 import { createClient } from "@/lib/supabase/server";
 import { dailyVideoLimitFor, getAccessPhase } from "@/lib/plan";
 
-const IMAGE_SEGMENT_SECONDS = 3;
-const MAX_IMAGE_SEGMENTS = 12;
+const ALLOWED_SCENE_SECONDS = [1, 2, 3, 4, 5] as const;
+const DEFAULT_SCENE_SECONDS = 3;
+const MAX_IMAGE_SEGMENTS = 30;
+// Padding added to narration/caption duration before splitting into scenes — gives
+// the scene count a little slack instead of exactly matching the spoken content.
+const SCENE_COUNT_PADDING_SECONDS = 6;
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -53,6 +57,9 @@ export async function POST(request: Request) {
   const captionText = typeof body?.text === "string" ? body.text.slice(0, 2000) : undefined;
   const style = typeof body?.style === "string" ? body.style.slice(0, 40) : undefined;
   const mood = typeof body?.mood === "string" ? body.mood.slice(0, 40) : undefined;
+  const sceneSeconds = ALLOWED_SCENE_SECONDS.includes(body?.sceneSeconds)
+    ? (body.sceneSeconds as number)
+    : DEFAULT_SCENE_SECONDS;
   const hasAudio = audioPath.length > 0;
   if ((hasAudio && !audioPath.startsWith(`${user.id}/`)) || !/^https:\/\//.test(imageUrl)) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
@@ -88,12 +95,12 @@ export async function POST(request: Request) {
     }
     const numSegments = Math.max(
       1,
-      Math.min(MAX_IMAGE_SEGMENTS, Math.round(duration / IMAGE_SEGMENT_SECONDS)),
+      Math.min(MAX_IMAGE_SEGMENTS, Math.round((duration + SCENE_COUNT_PADDING_SECONDS) / sceneSeconds)),
     );
 
     // First segment reuses the already-fetched cover image (keeps the video's opening
     // frame consistent with the thumbnail shown in the UI); extra segments get their
-    // own Pexels image, one per text chunk, so each ~3s image relates to that part of
+    // own Pexels image, one per text chunk, so each image relates to that part of
     // the narration.
     const imageUrls = [imageUrl];
     if (numSegments > 1 && captionText) {

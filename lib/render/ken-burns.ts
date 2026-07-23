@@ -327,12 +327,13 @@ export async function renderKenBurnsVideo(opts: {
 
   let audioMapSpec: string;
   const musicDur = duration.toFixed(3);
-  const fadeOutStart = Math.max(0, duration - 1.5).toFixed(3);
+  const musicFadeSeconds = 2;
+  const fadeOutStart = Math.max(0, duration - musicFadeSeconds).toFixed(3);
 
   if (narrationInputIndex !== null && musicInputIndex !== null) {
     filterLines.push(
       `[${musicInputIndex}:a]atrim=0:${musicDur},asetpts=PTS-STARTPTS,volume=0.15,` +
-        `afade=t=in:st=0:d=1,afade=t=out:st=${fadeOutStart}:d=1.5[music]`,
+        `afade=t=in:st=0:d=${musicFadeSeconds},afade=t=out:st=${fadeOutStart}:d=${musicFadeSeconds}[music]`,
     );
     filterLines.push(
       `[${narrationInputIndex}:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`,
@@ -343,7 +344,7 @@ export async function renderKenBurnsVideo(opts: {
   } else if (musicInputIndex !== null) {
     filterLines.push(
       `[${musicInputIndex}:a]atrim=0:${musicDur},asetpts=PTS-STARTPTS,volume=0.35,` +
-        `afade=t=in:st=0:d=1,afade=t=out:st=${fadeOutStart}:d=1.5[music]`,
+        `afade=t=in:st=0:d=${musicFadeSeconds},afade=t=out:st=${fadeOutStart}:d=${musicFadeSeconds}[music]`,
     );
     audioMapSpec = "[music]";
   } else {

@@ -3,8 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/lib/icons";
-import { useWizard, type StyleName } from "@/lib/wizard-context";
-import { Btn, Card, Dropzone, FieldLabel, HelpTip } from "@/components/app/ui";
+import { useWizard, type SceneSeconds, type StyleName } from "@/lib/wizard-context";
+import { Btn, Card, Dropzone, FieldLabel, HelpTip, Pill } from "@/components/app/ui";
+
+const SCENE_SECONDS_OPTIONS: SceneSeconds[] = [1, 2, 3, 4, 5];
 
 const STYLES: { name: StyleName; desc: string; preview: React.ReactNode }[] = [
   {
@@ -140,6 +142,23 @@ export default function EstiloPage() {
             <span className="text-[11.5px] text-[var(--text-3)] leading-snug">{s.desc}</span>
           </button>
         ))}
+      </div>
+
+      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
+        <span className="block text-xs font-medium text-[var(--text-2)] mb-2">
+          Duração de cada cena
+          <HelpTip
+            label="Como isso afeta o vídeo"
+            text="Cada cena é uma foto. O app soma a duração da narração (ou da legenda, se você pulou a gravação) com 6 segundos de folga e divide pelo tempo de cena escolhido — o resultado é quantas fotos entram no vídeo."
+          />
+        </span>
+        <div className="flex gap-2">
+          {SCENE_SECONDS_OPTIONS.map((s) => (
+            <Pill key={s} selected={wizard.sceneSeconds === s} onClick={() => wizard.setSceneSeconds(s)}>
+              {s}s
+            </Pill>
+          ))}
+        </div>
       </div>
 
       <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
