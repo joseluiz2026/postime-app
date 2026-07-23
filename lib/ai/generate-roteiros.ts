@@ -4,6 +4,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createGroq } from "@ai-sdk/groq";
 import { createOpenAI } from "@ai-sdk/openai";
 import { z } from "zod";
+import { MUSIC_MOODS } from "@/lib/audio/moods";
 
 export type LlmProvider = "google" | "openai" | "anthropic" | "groq";
 
@@ -17,6 +18,13 @@ export const PROVIDER_LABELS: Record<LlmProvider, string> = {
 const roteiroItemSchema = z.object({
   meta: z.string().describe("Rótulo curto do tema em maiúsculas, ex: 'TEMA 01 · GANCHO FORTE'"),
   text: z.string().describe("O texto do roteiro em português, pronto para narração"),
+  mood: z
+    .enum(MUSIC_MOODS)
+    .describe(
+      "Clima predominante do roteiro, para escolher a música de fundo do vídeo: " +
+        "motivacional (superação, conquista, virada de jogo), calmo (bem-estar, reflexão, autocuidado), " +
+        "corporativo (produtividade, carreira, negócios, dicas práticas neutras) ou animado (humor, curiosidades, entretenimento leve).",
+    ),
 });
 
 function resolveModel(provider: LlmProvider, apiKey: string) {

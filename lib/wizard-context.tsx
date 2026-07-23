@@ -535,7 +535,12 @@ export function WizardProvider({
             const renderRes = await fetch("/api/jobs/render", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ audioPath, imageUrl: image.url }),
+              body: JSON.stringify({
+                audioPath,
+                imageUrl: image.url,
+                text: roteiros[i]?.text ?? "",
+                style: selectedStyle,
+              }),
             });
             const renderData = await renderRes.json();
             if (!renderRes.ok) {

@@ -44,6 +44,8 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const audioPath = String(body?.audioPath ?? "");
   const imageUrl = String(body?.imageUrl ?? "");
+  const captionText = typeof body?.text === "string" ? body.text.slice(0, 2000) : undefined;
+  const style = typeof body?.style === "string" ? body.style.slice(0, 40) : undefined;
   if (!audioPath.startsWith(`${user.id}/`) || !/^https:\/\//.test(imageUrl)) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
@@ -75,6 +77,8 @@ export async function POST(request: Request) {
       imagePath: imageFile,
       audioPath: audioFile,
       outputPath: outputFile,
+      captionText,
+      style,
     });
 
     const videoBuffer = await readFile(outputFile);
