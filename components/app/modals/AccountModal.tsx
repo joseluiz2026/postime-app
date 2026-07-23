@@ -16,7 +16,7 @@ const TITLES: Record<string, { icon: string; title: string }> = {
 const FAQ_ITEMS = [
   {
     q: "Quantos vídeos posso gerar no plano Free?",
-    a: "18 gerações no total (não é por dia). Depois disso, conecte sua própria chave de API na \"Central de Provedores de IA\" para continuar gerando sem limite.",
+    a: "18 gerações no total (não é por dia). Depois disso, conecte sua própria chave de API na \"Provedores de IA\" para continuar gerando sem limite.",
   },
   {
     q: "Preciso pagar pela ElevenLabs pra clonar minha voz?",

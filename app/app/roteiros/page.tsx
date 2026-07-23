@@ -168,7 +168,7 @@ export default function RoteirosPage() {
 
       <div className="flex items-center gap-2.5 mt-2 flex-wrap">
         <Btn onClick={() => router.push("/app/provedores")}>
-          <Icon name="key" /> Central de Provedores de IA
+          <Icon name="key" /> Provedores de IA
         </Btn>
         {wizard.hasOwnKey && (
           <span className="text-[13px] text-[var(--text-2)]">

@@ -23,7 +23,7 @@ export default function ProvedoresPage() {
     <div>
       <Card>
         <h3 className="font-sans text-base font-semibold m-0 mb-1 text-[var(--text-1)] tracking-tight">
-          Central de Provedores de IA
+          Provedores de IA
         </h3>
         <p className="text-[13px] text-[var(--text-2)] m-0 leading-relaxed">
           O POSTime orquestra vários provedores de IA — você escolhe com qual conta gerar seu conteúdo. Não sabe por
