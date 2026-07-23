@@ -6,7 +6,7 @@ import { useTheme } from "@/lib/theme-context";
 export function ThemeSwitcher() {
   const { theme, setTheme } = useTheme();
   return (
-    <div className="px-4 py-3.5 bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] rounded-xl">
+    <div className="px-4 py-6 max-[640px]:py-3.5 bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] rounded-xl">
       <label className="block text-xs font-medium text-[var(--text-2)] mb-3">Paleta de cores</label>
       <div className="flex gap-2" role="group" aria-label="Escolher tema de cores">
         {THEMES.map((t) => (
