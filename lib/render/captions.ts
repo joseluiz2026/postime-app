@@ -61,6 +61,30 @@ function groupWords(words: string[], size: number): string[] {
   return out;
 }
 
+/**
+ * Greedily wraps text into lines of at most `maxCharsPerLine` characters,
+ * joined with `\n` (drawtext renders literal newlines in a textfile as
+ * multiple lines). ffmpeg's drawtext has no built-in word-wrap — without
+ * this, long captions run past the video's edges instead of breaking.
+ */
+export function wrapCaptionText(text: string, maxCharsPerLine: number): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "";
+
+  const lines: string[] = [];
+  let current = words[0];
+  for (const word of words.slice(1)) {
+    if (current.length + 1 + word.length <= maxCharsPerLine) {
+      current += ` ${word}`;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  lines.push(current);
+  return lines.join("\n");
+}
+
 /** Escapes a filesystem path for use inside an ffmpeg filtergraph option value. */
 export function escapeFilterPath(p: string): string {
   return p.replace(/\\/g, "/").replace(/:/g, "\\:");

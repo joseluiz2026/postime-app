@@ -3,7 +3,7 @@ import path from "path";
 import { existsSync, statSync } from "fs";
 import { writeFile } from "fs/promises";
 import ffmpegStaticPath from "ffmpeg-static";
-import { buildCaptionSegments, escapeFilterPath } from "./captions";
+import { buildCaptionSegments, escapeFilterPath, wrapCaptionText } from "./captions";
 
 // ffmpeg-static's bundled Linux binary lacks libfreetype (no `drawtext` filter
 // support), so captions never actually burned in on Vercel even though
@@ -58,6 +58,12 @@ type StyleRenderConfig = {
 };
 
 const DEFAULT_STYLE = "Minimalista";
+// Caption line-wrap budget: the 1080px canvas minus side margins, divided by
+// an estimated average glyph width for Poppins Bold (drawtext has no
+// built-in word-wrap, so without this long phrases run past the frame edges).
+const CAPTION_MAX_WIDTH_PX = 900;
+const AVG_CHAR_WIDTH_RATIO = 0.56;
+const AVG_CHAR_WIDTH_RATIO_UPPERCASE = 0.62;
 // When there's background music, the video runs this much longer than the
 // narration/captions so the music keeps playing after the speech ends, then
 // fades out — instead of cutting off right when the talking stops.
@@ -232,8 +238,12 @@ async function buildCaptionChain(opts: {
     if (seg.end - seg.start < 0.02) continue;
 
     const raw = cfg.uppercase ? segments[i].text.toUpperCase() : segments[i].text;
+    const charWidthRatio = cfg.uppercase ? AVG_CHAR_WIDTH_RATIO_UPPERCASE : AVG_CHAR_WIDTH_RATIO;
+    const maxCharsPerLine = Math.max(6, Math.floor(CAPTION_MAX_WIDTH_PX / (cfg.fontsize * charWidthRatio)));
+    // Word mode already burns one word at a time, so there's nothing to wrap.
+    const displayText = cfg.mode === "word" ? raw : wrapCaptionText(raw, maxCharsPerLine);
     const txtPath = path.join(opts.workDir, `cap_${i}.txt`);
-    await writeFile(txtPath, raw, "utf8");
+    await writeFile(txtPath, displayText, "utf8");
     const txtEsc = escapeFilterPath(txtPath);
 
     const start = seg.start.toFixed(3);
