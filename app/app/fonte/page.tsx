@@ -24,7 +24,6 @@ const SRC_ICON: Record<SourceType, string> = {
 export default function FontePage() {
   const wizard = useWizard();
   const router = useRouter();
-  const matched = wizard.matchedOwnImageIndices();
   const label = wizard.sourceLabel();
 
   return (
@@ -120,66 +119,6 @@ export default function FontePage() {
                 O POSTime pesquisa na web sobre esse tema, reúne as fontes mais relevantes e usa como base pros
                 roteiros — sem você precisar colar nada.
               </p>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
-          <FieldLabel>
-            Imagens próprias (opcional)
-            <HelpTip
-              label="Como funciona o encaixe automático"
-              text={
-                <>
-                  O nome do arquivo é usado pra encaixar a imagem automaticamente. Se o roteiro menciona &quot;praia
-                  de Copacabana&quot;, nomeie o arquivo como <strong>copacabana.jpg</strong> — o POSTime reconhece a
-                  palavra e usa essa foto nesse trecho, em vez de buscar uma genérica nos bancos gratuitos.
-                </>
-              }
-            />
-          </FieldLabel>
-          <p className="text-[13px] text-[var(--text-2)] mb-4 leading-relaxed">
-            Suas próprias fotos, de lugares, pessoas ou produtos citados no roteiro. <strong>Aviso:</strong> nomeie o
-            arquivo com a mesma palavra citada no roteiro — é assim que ele entra automaticamente na hora certa do
-            vídeo.
-          </p>
-          <Dropzone
-            icon="photo"
-            title="Clique para escolher ou arraste as imagens aqui"
-            subtitle="JPG, PNG ou WEBP · pode escolher várias · até 10MB cada"
-            accept=".jpg,.jpeg,.png,.webp,image/*"
-            multiple
-            onFiles={(files) => wizard.addOwnImages(files)}
-          />
-          {wizard.ownImages.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-4">
-              {wizard.ownImages.map((img, idx) => (
-                <div
-                  key={img.url}
-                  className={`flex items-center gap-2 bg-[var(--bg-2)] border-[0.5px] rounded-[9px] pl-1.5 pr-2 py-1.5 text-xs text-[var(--text-2)] max-w-[220px] ${
-                    matched.has(idx) ? "border-[var(--teal)]" : "border-[var(--line)]"
-                  }`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={img.url} alt="" className="w-7 h-7 object-cover rounded-md shrink-0" />
-                  <span className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px]" title={img.name}>
-                    {img.name}
-                  </span>
-                  {matched.has(idx) && (
-                    <span className="text-[var(--teal)] text-[13px] shrink-0" title="Encaixado automaticamente no roteiro">
-                      <Icon name="check" />
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    aria-label="Remover imagem"
-                    onClick={() => wizard.removeOwnImage(idx)}
-                    className="shrink-0 bg-transparent border-none text-[var(--text-3)] cursor-pointer text-sm leading-none flex hover:text-[var(--gold)]"
-                  >
-                    <Icon name="minus" />
-                  </button>
-                </div>
-              ))}
             </div>
           )}
         </div>

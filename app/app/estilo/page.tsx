@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/lib/icons";
 import { useWizard, type StyleName } from "@/lib/wizard-context";
-import { Btn, Card } from "@/components/app/ui";
+import { Btn, Card, Dropzone, FieldLabel, HelpTip } from "@/components/app/ui";
 
 const STYLES: { name: StyleName; desc: string; preview: React.ReactNode }[] = [
   {
@@ -94,6 +94,10 @@ export default function EstiloPage() {
   const n = wizard.selectedForVideo.length;
   const [showWarning, setShowWarning] = useState(false);
   const [prevN, setPrevN] = useState(n);
+  const matched = wizard.matchedOwnImageIndices();
+  const matchedTemas = wizard.selectedForVideo
+    .map((i) => ({ i, img: wizard.matchedOwnImageForRoteiro(i) }))
+    .filter((x): x is { i: number; img: NonNullable<typeof x.img> } => Boolean(x.img));
 
   if (n !== prevN) {
     setPrevN(n);
@@ -136,6 +140,81 @@ export default function EstiloPage() {
             <span className="text-[11.5px] text-[var(--text-3)] leading-snug">{s.desc}</span>
           </button>
         ))}
+      </div>
+
+      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
+        <FieldLabel>
+          Imagens próprias (opcional)
+          <HelpTip
+            label="Como funciona o encaixe automático"
+            text={
+              <>
+                O nome do arquivo é usado pra encaixar a imagem automaticamente. Se o roteiro menciona &quot;praia de
+                Copacabana&quot;, nomeie o arquivo como <strong>copacabana.jpg</strong> — o POSTime reconhece a
+                palavra e usa essa foto como capa do vídeo desse tema, em vez de buscar uma genérica nos bancos
+                gratuitos.
+              </>
+            }
+          />
+        </FieldLabel>
+        <p className="text-[13px] text-[var(--text-2)] mb-4 leading-relaxed">
+          Suas próprias fotos, de lugares, pessoas ou produtos citados no roteiro. <strong>Aviso:</strong> nomeie o
+          arquivo com a mesma palavra citada no roteiro — é assim que ele vira a capa do vídeo certo.
+        </p>
+        <Dropzone
+          icon="photo"
+          title={wizard.ownImagesUploading ? "Enviando..." : "Clique para escolher ou arraste as imagens aqui"}
+          subtitle="JPG, PNG ou WEBP · pode escolher várias · até 10MB cada"
+          accept=".jpg,.jpeg,.png,.webp,image/*"
+          multiple
+          onFiles={(files) => wizard.addOwnImages(files)}
+        />
+        {wizard.ownImagesError && (
+          <p className="text-[13px] text-[var(--gold)] mt-3">
+            <Icon name="alert-triangle" /> {wizard.ownImagesError}
+          </p>
+        )}
+        {wizard.ownImages.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-4">
+            {wizard.ownImages.map((img, idx) => (
+              <div
+                key={img.path}
+                className={`flex items-center gap-2 bg-[var(--bg-2)] border-[0.5px] rounded-[9px] pl-1.5 pr-2 py-1.5 text-xs text-[var(--text-2)] max-w-[220px] ${
+                  matched.has(idx) ? "border-[var(--teal)]" : "border-[var(--line)]"
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={img.url} alt="" className="w-7 h-7 object-cover rounded-md shrink-0" />
+                <span className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px]" title={img.name}>
+                  {img.name}
+                </span>
+                {matched.has(idx) && (
+                  <span className="text-[var(--teal)] text-[13px] shrink-0" title="Encaixado automaticamente no roteiro">
+                    <Icon name="check" />
+                  </span>
+                )}
+                <button
+                  type="button"
+                  aria-label="Remover imagem"
+                  onClick={() => wizard.removeOwnImage(idx)}
+                  className="shrink-0 bg-transparent border-none text-[var(--text-3)] cursor-pointer text-sm leading-none flex hover:text-[var(--gold)]"
+                >
+                  <Icon name="minus" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {matchedTemas.length > 0 && (
+          <div className="flex flex-col gap-1 mt-4">
+            {matchedTemas.map(({ i, img }) => (
+              <p key={i} className="text-[12.5px] text-[var(--teal)] m-0 flex items-center gap-1.5">
+                <Icon name="check" /> Tema {String(i + 1).padStart(2, "0")} vai usar sua foto:{" "}
+                <span className="font-mono">{img.name}</span>
+              </p>
+            ))}
+          </div>
+        )}
       </div>
 
       {showWarning && (

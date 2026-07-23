@@ -33,7 +33,7 @@ export type StyleName =
   | "Kinetic Text"
   | "Split Screen";
 
-export type OwnImage = { name: string; url: string };
+export type OwnImage = { name: string; url: string; path: string };
 export type Roteiro = { meta: string; text: string; mood?: MusicMood };
 // Core's video output is deliberately blind to distribution (see lib/distribution-context.tsx) —
 // it exposes an id so a channel-connect module can reference "which video", nothing about
@@ -109,6 +109,8 @@ type WizardState = {
   youtube: string;
   websearch: string;
   ownImages: OwnImage[];
+  ownImagesUploading: boolean;
+  ownImagesError: string | null;
 
   // roteiros
   duration: Duration;
@@ -146,10 +148,11 @@ type WizardContextValue = WizardState & {
   setLink: (v: string) => void;
   setYoutube: (v: string) => void;
   setWebsearch: (v: string) => void;
-  addOwnImages: (files: FileList) => void;
+  addOwnImages: (files: FileList) => Promise<void>;
   removeOwnImage: (idx: number) => void;
   sourceLabel: () => string | null;
   matchedOwnImageIndices: () => Set<number>;
+  matchedOwnImageForRoteiro: (idx: number) => OwnImage | undefined;
 
   setDuration: (d: Duration) => void;
   setQty: (v: number) => void;
@@ -230,6 +233,8 @@ export function WizardProvider({
   const [youtube, setYoutube] = useState("");
   const [websearch, setWebsearch] = useState("");
   const [ownImages, setOwnImages] = useState<OwnImage[]>([]);
+  const [ownImagesUploading, setOwnImagesUploading] = useState(false);
+  const [ownImagesError, setOwnImagesError] = useState<string | null>(null);
 
   const [duration, setDurationState] = useState<Duration>("15s");
   const [qty, setQtyState] = useState(3);
@@ -334,19 +339,62 @@ export function WizardProvider({
     return set;
   }, [ownImages, roteiros]);
 
-  const addOwnImages = useCallback((files: FileList) => {
-    const next: OwnImage[] = [];
-    Array.from(files).forEach((file) => {
-      if (!file.type.startsWith("image/")) return;
-      next.push({ name: file.name, url: URL.createObjectURL(file) });
-    });
-    setOwnImages((prev) => [...prev, ...next]);
-  }, []);
+  const matchedOwnImageForRoteiro = useCallback(
+    (idx: number): OwnImage | undefined => {
+      const text = normalizeForMatch(roteiros[idx]?.text ?? "");
+      if (!text) return undefined;
+      return ownImages.find((img) => {
+        const baseName = normalizeForMatch(img.name);
+        return baseName.length > 2 && text.includes(baseName);
+      });
+    },
+    [ownImages, roteiros],
+  );
+
+  const addOwnImages = useCallback(
+    async (files: FileList) => {
+      const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
+      if (imageFiles.length === 0) return;
+      setOwnImagesUploading(true);
+      setOwnImagesError(null);
+      try {
+        const supabase = createClient();
+        const next: OwnImage[] = [];
+        for (const file of imageFiles) {
+          const ext = file.name.split(".").pop() || "jpg";
+          const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+          const { error: upErr } = await supabase.storage
+            .from("postime-images")
+            .upload(path, file, { contentType: file.type || undefined });
+          if (upErr) continue;
+          const { data: signed } = await supabase.storage
+            .from("postime-images")
+            .createSignedUrl(path, 60 * 60 * 24);
+          if (signed?.signedUrl) next.push({ name: file.name, url: signed.signedUrl, path });
+        }
+        if (next.length < imageFiles.length) {
+          setOwnImagesError("Algumas imagens não puderam ser enviadas. Tente novamente.");
+        }
+        setOwnImages((prev) => [...prev, ...next]);
+      } catch {
+        setOwnImagesError("Falha de conexão. Tente novamente.");
+      } finally {
+        setOwnImagesUploading(false);
+      }
+    },
+    [userId],
+  );
 
   const removeOwnImage = useCallback((idx: number) => {
     setOwnImages((prev) => {
       const img = prev[idx];
-      if (img) URL.revokeObjectURL(img.url);
+      if (img) {
+        const supabase = createClient();
+        supabase.storage
+          .from("postime-images")
+          .remove([img.path])
+          .catch(() => {});
+      }
       return prev.filter((_, i) => i !== idx);
     });
   }, []);
@@ -521,22 +569,40 @@ export function WizardProvider({
     setBuildingVideos(true);
     setBuildError(null);
     try {
-      const queries = indices.map((i) => roteiros[i]?.text ?? "");
-      const res = await fetch("/api/scenes/images", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ queries }),
+      const ownMatches = new Map<number, OwnImage>();
+      indices.forEach((i) => {
+        const match = matchedOwnImageForRoteiro(i);
+        if (match) ownMatches.set(i, match);
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setBuildError("Não foi possível buscar as imagens agora. Tente novamente.");
-        return false;
+      const unmatchedIndices = indices.filter((i) => !ownMatches.has(i));
+
+      let fetchedImages: ({ url: string; photographer: string } | null)[] = [];
+      if (unmatchedIndices.length > 0) {
+        const queries = unmatchedIndices.map((i) => roteiros[i]?.text ?? "");
+        const res = await fetch("/api/scenes/images", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ queries }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setBuildError("Não foi possível buscar as imagens agora. Tente novamente.");
+          return false;
+        }
+        fetchedImages = data.images;
       }
-      const images: ({ url: string; photographer: string } | null)[] = data.images;
+
+      const imageByIndex = new Map<number, { url: string; photographer: string }>();
+      unmatchedIndices.forEach((i, pos) => {
+        const img = fetchedImages[pos];
+        if (img) imageByIndex.set(i, img);
+      });
+      ownMatches.forEach((img, i) => imageByIndex.set(i, { url: img.url, photographer: "Sua foto" }));
+
       let dailyLimitHit = false;
       const built: Omit<Video, "id">[] = await Promise.all(
-        indices.map(async (i, pos): Promise<Omit<Video, "id">> => {
-          const image = images[pos];
+        indices.map(async (i): Promise<Omit<Video, "id">> => {
+          const image = imageByIndex.get(i);
           const base: Omit<Video, "id"> = {
             title: `Tema ${String(i + 1).padStart(2, "0")} · ${selectedStyle}`,
             style: selectedStyle,
@@ -587,7 +653,7 @@ export function WizardProvider({
     } finally {
       setBuildingVideos(false);
     }
-  }, [selectedForVideo, selectedStyle, sourceLabel, applyVideos, roteiros, audioPaths]);
+  }, [selectedForVideo, selectedStyle, sourceLabel, applyVideos, roteiros, audioPaths, matchedOwnImageForRoteiro]);
 
   const clickAutoGenerate = useCallback(() => {
     if (accessPhase === "locked") {
@@ -687,6 +753,8 @@ export function WizardProvider({
       youtube,
       websearch,
       ownImages,
+      ownImagesUploading,
+      ownImagesError,
       duration,
       qty,
       roteiros,
@@ -717,6 +785,7 @@ export function WizardProvider({
       removeOwnImage,
       sourceLabel,
       matchedOwnImageIndices,
+      matchedOwnImageForRoteiro,
       setDuration,
       setQty,
       qtyMax,
@@ -762,6 +831,8 @@ export function WizardProvider({
       youtube,
       websearch,
       ownImages,
+      ownImagesUploading,
+      ownImagesError,
       duration,
       qty,
       roteiros,
@@ -786,6 +857,7 @@ export function WizardProvider({
       removeOwnImage,
       sourceLabel,
       matchedOwnImageIndices,
+      matchedOwnImageForRoteiro,
       setDuration,
       setQty,
       qtyMax,
