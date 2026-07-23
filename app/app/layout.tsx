@@ -57,14 +57,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 Transforme qualquer material em roteiros diários, narrados com sua própria voz, prontos para
                 publicar.
               </p>
-              <div className="mt-5 max-w-[520px] aspect-video rounded-xl border-[1.5px] border-dashed border-[var(--line-strong)] bg-[var(--bg-1)] flex flex-col items-center justify-center gap-2">
+              <div className="mt-5 w-full aspect-video rounded-xl border-[1.5px] border-dashed border-[var(--line-strong)] bg-[var(--bg-1)] flex flex-col items-center justify-center gap-2">
                 <div className="w-11 h-11 rounded-full bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] flex items-center justify-center text-[var(--gold)] text-lg">
                   <Icon name="player-play" />
                 </div>
                 <span className="text-xs text-[var(--text-3)]">Vídeo tutorial em breve</span>
               </div>
             </div>
-            <div className="shrink-0 flex flex-col gap-3">
+            <div className="shrink-0 flex flex-col gap-3 max-[640px]:w-full">
               <AccountCard />
               <ThemeSwitcher />
             </div>

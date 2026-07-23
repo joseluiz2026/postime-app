@@ -17,7 +17,7 @@ export function AccountCard() {
   }
 
   return (
-    <div className="w-[216px] shrink-0 bg-[var(--bg-1)] border-[0.5px] border-[var(--line)] rounded-[14px] p-3.5">
+    <div className="w-[280px] max-[640px]:w-full shrink-0 bg-[var(--bg-1)] border-[0.5px] border-[var(--line)] rounded-[14px] p-3.5">
       <div className="flex items-center gap-2.5 mb-3 pb-3 border-b-[0.5px] border-[var(--line)]">
         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--gold)] to-[var(--teal)] flex items-center justify-center font-[var(--font-display)] font-bold text-[13px] text-[#12141A] shrink-0">
           {wizard.accountInitials()}
