@@ -3,10 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/lib/icons";
-import { useWizard, type SceneSeconds, type StyleName } from "@/lib/wizard-context";
+import { useWizard, type MusicMoodSelection, type SceneSeconds, type StyleName } from "@/lib/wizard-context";
 import { Btn, Card, Dropzone, FieldLabel, HelpTip, Pill } from "@/components/app/ui";
 
 const SCENE_SECONDS_OPTIONS: SceneSeconds[] = [1, 2, 3, 4, 5];
+
+const MUSIC_MOOD_OPTIONS: { id: MusicMoodSelection; label: string }[] = [
+  { id: "auto", label: "Automático" },
+  { id: "motivacional", label: "Motivacional" },
+  { id: "calmo", label: "Calmo" },
+  { id: "corporativo", label: "Corporativo" },
+  { id: "animado", label: "Animado" },
+];
 
 const STYLES: { name: StyleName; desc: string; preview: React.ReactNode }[] = [
   {
@@ -156,6 +164,23 @@ export default function EstiloPage() {
           {SCENE_SECONDS_OPTIONS.map((s) => (
             <Pill key={s} selected={wizard.sceneSeconds === s} onClick={() => wizard.setSceneSeconds(s)}>
               {s}s
+            </Pill>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
+        <span className="block text-xs font-medium text-[var(--text-2)] mb-2">
+          Música de fundo
+          <HelpTip
+            label="Como funciona a escolha automática"
+            text="No automático, cada roteiro já tem um clima definido pela IA (motivacional, calmo, corporativo ou animado) e o vídeo usa uma faixa desse clima. Escolhendo um clima aqui, todos os vídeos dessa leva usam esse clima em vez do automático."
+          />
+        </span>
+        <div className="flex gap-2 flex-wrap">
+          {MUSIC_MOOD_OPTIONS.map((m) => (
+            <Pill key={m.id} selected={wizard.musicMood === m.id} onClick={() => wizard.setMusicMood(m.id)}>
+              {m.label}
             </Pill>
           ))}
         </div>

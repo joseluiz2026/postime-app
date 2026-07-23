@@ -33,6 +33,7 @@ export type StyleName =
   | "Kinetic Text"
   | "Split Screen";
 export type SceneSeconds = 1 | 2 | 3 | 4 | 5;
+export type MusicMoodSelection = MusicMood | "auto";
 
 export type OwnImage = { name: string; url: string; path: string };
 export type Roteiro = { meta: string; text: string; mood?: MusicMood };
@@ -130,6 +131,7 @@ type WizardState = {
   // estilo
   selectedStyle: StyleName;
   sceneSeconds: SceneSeconds;
+  musicMood: MusicMoodSelection;
 
   // download
   videos: Video[];
@@ -177,6 +179,7 @@ type WizardContextValue = WizardState & {
 
   setSelectedStyle: (s: StyleName) => void;
   setSceneSeconds: (s: SceneSeconds) => void;
+  setMusicMood: (m: MusicMoodSelection) => void;
   confirmBuild: () => Promise<boolean>;
   buildingVideos: boolean;
   buildError: string | null;
@@ -253,6 +256,7 @@ export function WizardProvider({
 
   const [selectedStyle, setSelectedStyle] = useState<StyleName>("Minimalista");
   const [sceneSeconds, setSceneSeconds] = useState<SceneSeconds>(3);
+  const [musicMood, setMusicMood] = useState<MusicMoodSelection>("auto");
 
   const [videos, setVideos] = useState<Video[]>([]);
   const [videoCountStatus, setVideoCountStatus] = useState("");
@@ -624,7 +628,7 @@ export function WizardProvider({
                 imageUrl: image.url,
                 text: roteiros[i]?.text ?? "",
                 style: selectedStyle,
-                mood: roteiros[i]?.mood,
+                mood: musicMood === "auto" ? roteiros[i]?.mood : musicMood,
                 sceneSeconds,
               }),
             });
@@ -662,6 +666,7 @@ export function WizardProvider({
     selectedForVideo,
     selectedStyle,
     sceneSeconds,
+    musicMood,
     sourceLabel,
     applyVideos,
     roteiros,
@@ -781,6 +786,7 @@ export function WizardProvider({
       audioError,
       selectedStyle,
       sceneSeconds,
+      musicMood,
       videos,
       videoCountStatus,
       buildingVideos,
@@ -817,6 +823,7 @@ export function WizardProvider({
       toggleSelectedForVideo,
       setSelectedStyle,
       setSceneSeconds,
+      setMusicMood,
       confirmBuild,
       clickAutoGenerate,
       connectEleven,
@@ -861,6 +868,7 @@ export function WizardProvider({
       audioError,
       selectedStyle,
       sceneSeconds,
+      musicMood,
       videos,
       videoCountStatus,
       buildingVideos,
