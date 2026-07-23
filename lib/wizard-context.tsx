@@ -540,6 +540,7 @@ export function WizardProvider({
                 imageUrl: image.url,
                 text: roteiros[i]?.text ?? "",
                 style: selectedStyle,
+                mood: roteiros[i]?.mood,
               }),
             });
             const renderData = await renderRes.json();

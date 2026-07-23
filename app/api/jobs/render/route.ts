@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { probeDurationSeconds, renderKenBurnsVideo } from "@/lib/render/ken-burns";
 import { splitTextIntoChunks } from "@/lib/render/captions";
 import { searchPexelsImage } from "@/lib/images/pexels";
+import { pickMusicTrack } from "@/lib/audio/music-picker";
 import { createClient } from "@/lib/supabase/server";
 import { dailyVideoLimitFor, getAccessPhase } from "@/lib/plan";
 
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
   const imageUrl = String(body?.imageUrl ?? "");
   const captionText = typeof body?.text === "string" ? body.text.slice(0, 2000) : undefined;
   const style = typeof body?.style === "string" ? body.style.slice(0, 40) : undefined;
+  const mood = typeof body?.mood === "string" ? body.mood.slice(0, 40) : undefined;
   if (!audioPath.startsWith(`${user.id}/`) || !/^https:\/\//.test(imageUrl)) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
@@ -108,6 +110,8 @@ export async function POST(request: Request) {
       }),
     );
 
+    const musicPath = await pickMusicTrack(mood);
+
     const outputFile = path.join(dir, "output.mp4");
     const durationSeconds = await renderKenBurnsVideo({
       imagePaths: imageFiles,
@@ -116,6 +120,7 @@ export async function POST(request: Request) {
       captionText,
       style,
       durationSeconds: duration,
+      musicPath: musicPath ?? undefined,
     });
 
     const videoBuffer = await readFile(outputFile);

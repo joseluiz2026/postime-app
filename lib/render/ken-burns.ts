@@ -250,7 +250,10 @@ async function buildCaptionChain(opts: {
  * ~equal-length segment and consecutive segments crossfade (transition style
  * depends on `style`). Optional burned-in captions are synced to the audio via
  * proportional text-time splitting (no forced-alignment step exists in this
- * pipeline). Video duration matches the audio. Returns the duration in seconds.
+ * pipeline). An optional background music track is looped/trimmed to match,
+ * lightly attenuated, faded in/out, and mixed under the narration (fixed-level
+ * mix, not dynamic ducking). Video duration matches the audio. Returns the
+ * duration in seconds.
  */
 export async function renderKenBurnsVideo(opts: {
   imagePaths: string[];
@@ -259,6 +262,7 @@ export async function renderKenBurnsVideo(opts: {
   captionText?: string;
   style?: string;
   durationSeconds?: number;
+  musicPath?: string;
 }): Promise<number> {
   if (opts.imagePaths.length === 0) throw new Error("renderKenBurnsVideo: no images provided");
 
@@ -289,23 +293,41 @@ export async function renderKenBurnsVideo(opts: {
     outLabel = chain.outLabel;
   }
 
+  const audioInputIndex = opts.imagePaths.length;
+  let audioMapSpec = `${audioInputIndex}:a`;
+
+  if (opts.musicPath) {
+    const musicInputIndex = audioInputIndex + 1;
+    const musicDur = duration.toFixed(3);
+    const fadeOutStart = Math.max(0, duration - 1.5).toFixed(3);
+    filterLines.push(
+      `[${musicInputIndex}:a]atrim=0:${musicDur},asetpts=PTS-STARTPTS,volume=0.15,` +
+        `afade=t=in:st=0:d=1,afade=t=out:st=${fadeOutStart}:d=1.5[music]`,
+    );
+    filterLines.push(
+      `[${audioInputIndex}:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`,
+    );
+    audioMapSpec = "[aout]";
+  }
+
   const scriptPath = path.join(workDir, "filtergraph.txt");
   await writeFile(scriptPath, filterLines.join(";\n"), "utf8");
 
-  const audioInputIndex = opts.imagePaths.length;
   const args: string[] = ["-y"];
   for (const imagePath of opts.imagePaths) {
     args.push("-loop", "1", "-i", imagePath);
   }
+  args.push("-i", opts.audioPath);
+  if (opts.musicPath) {
+    args.push("-stream_loop", "-1", "-i", opts.musicPath);
+  }
   args.push(
-    "-i",
-    opts.audioPath,
     "-filter_complex_script",
     scriptPath,
     "-map",
     `[${outLabel}]`,
     "-map",
-    `${audioInputIndex}:a`,
+    audioMapSpec,
     "-c:v",
     "libx264",
     "-pix_fmt",
