@@ -3,7 +3,7 @@ import { tmpdir } from "os";
 import path from "path";
 import { NextResponse } from "next/server";
 import { probeDurationSeconds, renderKenBurnsVideo } from "@/lib/render/ken-burns";
-import { splitTextIntoChunks } from "@/lib/render/captions";
+import { estimateReadingDurationSeconds, splitTextIntoChunks } from "@/lib/render/captions";
 import { searchPexelsImage } from "@/lib/images/pexels";
 import { pickMusicTrack } from "@/lib/audio/music-picker";
 import { createClient } from "@/lib/supabase/server";
@@ -53,7 +53,13 @@ export async function POST(request: Request) {
   const captionText = typeof body?.text === "string" ? body.text.slice(0, 2000) : undefined;
   const style = typeof body?.style === "string" ? body.style.slice(0, 40) : undefined;
   const mood = typeof body?.mood === "string" ? body.mood.slice(0, 40) : undefined;
-  if (!audioPath.startsWith(`${user.id}/`) || !/^https:\/\//.test(imageUrl)) {
+  const hasAudio = audioPath.length > 0;
+  if ((hasAudio && !audioPath.startsWith(`${user.id}/`)) || !/^https:\/\//.test(imageUrl)) {
+    return NextResponse.json({ error: "invalid_input" }, { status: 400 });
+  }
+  // No recorded narration: the video falls back to showing the roteiro text as
+  // captions throughout, so there must be text to show.
+  if (!hasAudio && !captionText) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
 
@@ -68,13 +74,18 @@ export async function POST(request: Request) {
 
   const dir = await mkdtemp(path.join(tmpdir(), "postime-render-"));
   try {
-    const { data: audioBlob, error: dlErr } = await supabase.storage.from("postime-audio").download(audioPath);
-    if (dlErr || !audioBlob) throw new Error("audio_download_failed");
-    const audioExt = audioPath.split(".").pop() || "webm";
-    const audioFile = path.join(dir, `audio.${audioExt}`);
-    await writeFile(audioFile, Buffer.from(await audioBlob.arrayBuffer()));
-
-    const duration = await probeDurationSeconds(audioFile);
+    let audioFile: string | undefined;
+    let duration: number;
+    if (hasAudio) {
+      const { data: audioBlob, error: dlErr } = await supabase.storage.from("postime-audio").download(audioPath);
+      if (dlErr || !audioBlob) throw new Error("audio_download_failed");
+      const audioExt = audioPath.split(".").pop() || "webm";
+      audioFile = path.join(dir, `audio.${audioExt}`);
+      await writeFile(audioFile, Buffer.from(await audioBlob.arrayBuffer()));
+      duration = await probeDurationSeconds(audioFile);
+    } else {
+      duration = estimateReadingDurationSeconds(captionText!);
+    }
     const numSegments = Math.max(
       1,
       Math.min(MAX_IMAGE_SEGMENTS, Math.round(duration / IMAGE_SEGMENT_SECONDS)),
@@ -117,9 +128,9 @@ export async function POST(request: Request) {
       imagePaths: imageFiles,
       audioPath: audioFile,
       outputPath: outputFile,
+      durationSeconds: duration,
       captionText,
       style,
-      durationSeconds: duration,
       musicPath: musicPath ?? undefined,
     });
 

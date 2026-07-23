@@ -167,6 +167,7 @@ type WizardContextValue = WizardState & {
 
   setScriptIndex: (i: number) => void;
   uploadRecording: (idx: number, file: Blob, ext: string) => Promise<boolean>;
+  skipAudio: (idx: number) => void;
   toggleSelectedForVideo: (idx: number) => void;
 
   setSelectedStyle: (s: StyleName) => void;
@@ -497,6 +498,19 @@ export function WizardProvider({
     [userId, roteiros.length],
   );
 
+  /**
+   * Marks a tema as ready for video without a recording — no audioPaths entry
+   * is set, so the render pipeline falls back to showing the roteiro text as
+   * captions across the whole video instead of syncing to narration.
+   */
+  const skipAudio = useCallback(
+    (idx: number) => {
+      setSavedTemas((prev) => prev.map((v, i) => (i === idx ? true : v)));
+      setScriptIndex((i) => Math.min(i + 1, roteiros.length - 1));
+    },
+    [roteiros.length],
+  );
+
   const toggleSelectedForVideo = useCallback((idx: number) => {
     setSelectedForVideo((prev) => (prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]));
   }, []);
@@ -530,7 +544,7 @@ export function WizardProvider({
             imageCredit: image?.photographer,
           };
           const audioPath = audioPaths[i];
-          if (!image?.url || !audioPath || dailyLimitHit) return base;
+          if (!image?.url || dailyLimitHit) return base;
           try {
             const renderRes = await fetch("/api/jobs/render", {
               method: "POST",
@@ -715,6 +729,7 @@ export function WizardProvider({
       clickGerar,
       setScriptIndex,
       uploadRecording,
+      skipAudio,
       toggleSelectedForVideo,
       setSelectedStyle,
       confirmBuild,
@@ -782,6 +797,7 @@ export function WizardProvider({
       regenerateRoteiro,
       clickGerar,
       uploadRecording,
+      skipAudio,
       toggleSelectedForVideo,
       confirmBuild,
       clickAutoGenerate,

@@ -4,6 +4,22 @@ const MIN_PHRASE_SECONDS = 0.6;
 const MIN_WORD_SECONDS = 0.15;
 const WORDS_PER_PHRASE = 6;
 
+const READING_WORDS_PER_MINUTE = 150;
+const MIN_READING_DURATION_SECONDS = 4;
+const MAX_READING_DURATION_SECONDS = 90;
+
+/**
+ * Estimates how long a video should run when there's no narration audio to
+ * probe (the no-audio fallback: the roteiro text is shown as captions across
+ * the whole video instead of being synced to a recording). Paced at a typical
+ * spoken rate, clamped to a sane render range.
+ */
+export function estimateReadingDurationSeconds(text: string): number {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  const seconds = (words / READING_WORDS_PER_MINUTE) * 60;
+  return Math.min(MAX_READING_DURATION_SECONDS, Math.max(MIN_READING_DURATION_SECONDS, seconds));
+}
+
 /**
  * Splits narration text into caption chunks with start/end times proportional
  * to each chunk's character length. There's no forced-alignment/STT step in

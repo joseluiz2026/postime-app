@@ -161,6 +161,13 @@ export default function GravacaoPage() {
     resetRec();
   }
 
+  function skip() {
+    const wasLast = idx >= slides.length - 1;
+    wizard.skipAudio(idx);
+    if (wasLast) setAllDone(true);
+    resetRec();
+  }
+
   if (!current) {
     return (
       <Card>
@@ -242,6 +249,15 @@ export default function GravacaoPage() {
             <Icon name="file-music" /> Enviar MP3
           </button>
         </div>
+
+        {phase === "idle" && (
+          <button
+            onClick={skip}
+            className="mt-3 text-[12.5px] text-[var(--text-2)] bg-transparent border-none cursor-pointer underline decoration-dotted hover:text-[var(--text-1)]"
+          >
+            Pular gravação · usar o texto no vídeo
+          </button>
+        )}
 
         {mode === "record" && (
           <div className="flex flex-col items-center w-full mt-8">
@@ -328,7 +344,16 @@ export default function GravacaoPage() {
             const isUsed = wizard.usedTemas[i];
             const isCurrent = i === idx && !isDone;
             const isChecked = wizard.selectedForVideo.includes(i);
-            const label = isUsed ? "já usado em vídeo" : isDone ? "salvo" : isCurrent ? "em andamento" : "pendente";
+            const hasAudio = Boolean(wizard.audioPaths[i]);
+            const label = isUsed
+              ? "já usado em vídeo"
+              : isDone
+                ? hasAudio
+                  ? "salvo"
+                  : "texto no vídeo"
+                : isCurrent
+                  ? "em andamento"
+                  : "pendente";
             return (
               <div
                 key={i}
