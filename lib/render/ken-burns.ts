@@ -1,30 +1,42 @@
 import { spawn } from "child_process";
 import path from "path";
+import { existsSync, statSync } from "fs";
 import { writeFile } from "fs/promises";
-import ffmpegPath from "ffmpeg-static";
-import { path as ffprobePath } from "ffprobe-static";
+import ffmpegStaticPath from "ffmpeg-static";
 import { buildCaptionSegments, escapeFilterPath } from "./captions";
 
+// ffmpeg-static's bundled Linux binary lacks libfreetype (no `drawtext` filter
+// support), so captions never actually burned in on Vercel even though
+// everything worked locally on Windows (a different, full-featured build).
+// scripts/setup-ffmpeg.js downloads a Linux build that does have it into
+// vendor/ffmpeg at install time; prefer that when present, and fall back to
+// ffmpeg-static everywhere else (local dev, or if that download failed).
+const VENDOR_FFMPEG_PATH = path.join(process.cwd(), "vendor", "ffmpeg", "ffmpeg");
+
+function resolveFfmpegPath(): string {
+  if (existsSync(VENDOR_FFMPEG_PATH) && statSync(VENDOR_FFMPEG_PATH).size > 0) {
+    return VENDOR_FFMPEG_PATH;
+  }
+  return ffmpegStaticPath as string;
+}
+
+/**
+ * Probes a media file's duration via ffmpeg itself (not ffprobe — one fewer
+ * platform-specific binary to source/bundle, and ffmpeg always prints this to
+ * stderr when given an input with no output).
+ */
 export function probeDurationSeconds(filePath: string): Promise<number> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(ffprobePath, [
-      "-v",
-      "error",
-      "-show_entries",
-      "format=duration",
-      "-of",
-      "default=noprint_wrappers=1:nokey=1",
-      filePath,
-    ]);
-    let out = "";
+    const proc = spawn(resolveFfmpegPath(), ["-i", filePath]);
     let err = "";
-    proc.stdout.on("data", (d) => (out += d));
     proc.stderr.on("data", (d) => (err += d));
     proc.on("error", reject);
-    proc.on("close", (code) => {
-      if (code !== 0) return reject(new Error(`ffprobe failed: ${err.slice(-500)}`));
-      const seconds = parseFloat(out.trim());
-      if (!Number.isFinite(seconds) || seconds <= 0) return reject(new Error("could not read audio duration"));
+    proc.on("close", () => {
+      const match = err.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/);
+      if (!match) return reject(new Error("could not read media duration"));
+      const [, hh, mm, ss] = match;
+      const seconds = Number(hh) * 3600 + Number(mm) * 60 + Number(ss);
+      if (!Number.isFinite(seconds) || seconds <= 0) return reject(new Error("could not read media duration"));
       resolve(seconds);
     });
   });
@@ -390,7 +402,7 @@ export async function renderKenBurnsVideo(opts: {
   );
 
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn(ffmpegPath as string, args);
+    const proc = spawn(resolveFfmpegPath(), args);
     let stderr = "";
     proc.stderr.on("data", (d) => (stderr += d));
     proc.on("error", reject);
