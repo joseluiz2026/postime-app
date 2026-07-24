@@ -37,6 +37,7 @@ export type MusicMoodSelection = MusicMood | "auto";
 export type CaptionColor = "auto" | "white" | "black" | "yellow" | "red";
 export type CaptionSize = "small" | "medium" | "large";
 export type CaptionFont = "poppins" | "anton" | "archivoblack";
+export type WatermarkPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export type OwnImage = { name: string; url: string; path: string };
 export type Roteiro = { meta: string; text: string; mood?: MusicMood };
@@ -51,6 +52,7 @@ export type Video = {
   imageUrl?: string;
   imageCredit?: string;
   videoUrl?: string;
+  videoPath?: string;
   expiresAt?: string;
   durationSeconds?: number;
 };
@@ -73,6 +75,28 @@ type ModalState =
   | { type: "whatsapp" }
   | { type: "tiktok" }
   | { type: "buildFailed"; failedIndices: number[] };
+
+/** Best-effort check that a PNG actually has transparent pixels — samples every
+ * pixel's alpha channel via canvas, since the file extension alone doesn't tell
+ * us whether the background was actually cut out. */
+async function hasPngTransparency(file: File): Promise<boolean> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return true;
+    ctx.drawImage(bitmap, 0, 0);
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] < 255) return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
 
 function normalizeForMatch(str: string): string {
   return str
@@ -141,6 +165,11 @@ type WizardState = {
   captionColor: CaptionColor;
   captionSize: CaptionSize;
   captionFont: CaptionFont;
+  captionShadow: boolean;
+  watermark: { url: string; path: string } | null;
+  watermarkPosition: WatermarkPosition;
+  watermarkUploading: boolean;
+  watermarkError: string | null;
 
   // download
   videos: Video[];
@@ -185,6 +214,7 @@ type WizardContextValue = WizardState & {
   uploadRecording: (idx: number, file: Blob, ext: string) => Promise<boolean>;
   skipAudio: (idx: number) => void;
   retryRecording: (idx: number) => void;
+  retryVideo: (video: Video) => void;
   deleteRoteiro: (idx: number) => void;
   toggleSelectedForVideo: (idx: number) => void;
 
@@ -192,9 +222,13 @@ type WizardContextValue = WizardState & {
   setCaptionColor: (c: CaptionColor) => void;
   setCaptionSize: (s: CaptionSize) => void;
   setCaptionFont: (f: CaptionFont) => void;
+  setCaptionShadow: (v: boolean) => void;
   setSceneSecondsForTema: (idx: number, s: SceneSeconds) => void;
   setMusicMoodForTema: (idx: number, m: MusicMoodSelection) => void;
-  confirmBuild: () => Promise<{ ok: boolean; failedIndices: number[] }>;
+  uploadWatermark: (file: File) => Promise<void>;
+  removeWatermark: () => void;
+  setWatermarkPosition: (pos: WatermarkPosition) => void;
+  confirmBuild: () => Promise<{ ok: boolean; failedIndices: number[]; dailyLimitHit: boolean }>;
   buildingVideos: boolean;
   buildProgress: { completed: number; total: number } | null;
   buildError: string | null;
@@ -273,8 +307,13 @@ export function WizardProvider({
   const [captionColor, setCaptionColor] = useState<CaptionColor>("auto");
   const [captionSize, setCaptionSize] = useState<CaptionSize>("medium");
   const [captionFont, setCaptionFont] = useState<CaptionFont>("poppins");
+  const [captionShadow, setCaptionShadow] = useState(false);
   const [sceneSecondsByTema, setSceneSecondsByTema] = useState<SceneSeconds[]>([]);
   const [musicMoodByTema, setMusicMoodByTema] = useState<MusicMoodSelection[]>([]);
+  const [watermark, setWatermark] = useState<{ url: string; path: string } | null>(null);
+  const [watermarkPosition, setWatermarkPosition] = useState<WatermarkPosition>("bottom-right");
+  const [watermarkUploading, setWatermarkUploading] = useState(false);
+  const [watermarkError, setWatermarkError] = useState<string | null>(null);
 
   const setSceneSecondsForTema = useCallback((idx: number, s: SceneSeconds) => {
     setSceneSecondsByTema((prev) => prev.map((v, i) => (i === idx ? s : v)));
@@ -431,6 +470,55 @@ export function WizardProvider({
           .catch(() => {});
       }
       return prev.filter((_, i) => i !== idx);
+    });
+  }, []);
+
+  const uploadWatermark = useCallback(
+    async (file: File) => {
+      setWatermarkError(null);
+      if (file.type !== "image/png") {
+        setWatermarkError("A logo precisa ser um arquivo PNG.");
+        return;
+      }
+      setWatermarkUploading(true);
+      try {
+        const transparent = await hasPngTransparency(file);
+        if (!transparent) {
+          setWatermarkError("O PNG precisa ter fundo transparente.");
+          return;
+        }
+        const supabase = createClient();
+        const path = `${userId}/watermark.png`;
+        const { error: upErr } = await supabase.storage
+          .from("postime-images")
+          .upload(path, file, { contentType: "image/png", upsert: true });
+        if (upErr) {
+          setWatermarkError("Não foi possível enviar a logo agora. Tente novamente.");
+          return;
+        }
+        const { data: signed } = await supabase.storage
+          .from("postime-images")
+          .createSignedUrl(path, 60 * 60 * 24);
+        if (signed?.signedUrl) setWatermark({ url: signed.signedUrl, path });
+      } catch {
+        setWatermarkError("Falha de conexão. Tente novamente.");
+      } finally {
+        setWatermarkUploading(false);
+      }
+    },
+    [userId],
+  );
+
+  const removeWatermark = useCallback(() => {
+    setWatermark((prev) => {
+      if (prev) {
+        const supabase = createClient();
+        supabase.storage
+          .from("postime-images")
+          .remove([prev.path])
+          .catch(() => {});
+      }
+      return null;
     });
   }, []);
 
@@ -620,6 +708,26 @@ export function WizardProvider({
   }, []);
 
   /**
+   * Lets the user discard a video they don't like, not just a failed one —
+   * deletes the rendered file immediately (best-effort; the UI resets either
+   * way) and sends the tema back through the recording flow via retryRecording.
+   */
+  const retryVideo = useCallback(
+    (video: Video) => {
+      if (video.videoPath) {
+        fetch("/api/jobs/render", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ videoPath: video.videoPath }),
+        }).catch(() => {});
+      }
+      setVideos((prev) => prev.filter((v) => v.id !== video.id));
+      retryRecording(video.temaIndex);
+    },
+    [retryRecording],
+  );
+
+  /**
    * Marks a tema as deleted instead of splicing it out of the parallel arrays —
    * a real removal would shift every later index and break the temaIndex a
    * built Video already points at (e.g. the Download page's "Regravar" button).
@@ -646,8 +754,12 @@ export function WizardProvider({
     setSelectedForVideo((prev) => (prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]));
   }, []);
 
-  const confirmBuild = useCallback(async (): Promise<{ ok: boolean; failedIndices: number[] }> => {
-    if (selectedForVideo.length === 0) return { ok: false, failedIndices: [] };
+  const confirmBuild = useCallback(async (): Promise<{
+    ok: boolean;
+    failedIndices: number[];
+    dailyLimitHit: boolean;
+  }> => {
+    if (selectedForVideo.length === 0) return { ok: false, failedIndices: [], dailyLimitHit: false };
     const indices = [...selectedForVideo].sort((a, b) => a - b);
     setBuildingVideos(true);
     setBuildError(null);
@@ -670,7 +782,7 @@ export function WizardProvider({
         const data = await res.json();
         if (!res.ok) {
           setBuildError("Não foi possível buscar as imagens agora. Tente novamente.");
-          return { ok: false, failedIndices: [] };
+          return { ok: false, failedIndices: [], dailyLimitHit: false };
         }
         fetchedImages = data.images;
       }
@@ -715,6 +827,9 @@ export function WizardProvider({
                 captionColor,
                 captionSize,
                 captionFont,
+                captionShadow,
+                watermarkPath: watermark?.path,
+                watermarkPosition,
               }),
             });
             const renderData = await renderRes.json();
@@ -725,6 +840,7 @@ export function WizardProvider({
             return {
               ...base,
               videoUrl: renderData.videoUrl,
+              videoPath: renderData.videoPath,
               expiresAt: renderData.expiresAt,
               durationSeconds: renderData.durationSeconds,
             };
@@ -753,10 +869,10 @@ export function WizardProvider({
       if (dailyLimitHit) {
         setBuildError("Você atingiu o limite de vídeos de hoje. Volte amanhã ou assine para continuar sem limite.");
       }
-      return { ok: true, failedIndices };
+      return { ok: true, failedIndices, dailyLimitHit };
     } catch {
       setBuildError("Falha de conexão. Tente novamente.");
-      return { ok: false, failedIndices: [] };
+      return { ok: false, failedIndices: [], dailyLimitHit: false };
     } finally {
       setBuildProgress(null);
       setBuildingVideos(false);
@@ -769,11 +885,14 @@ export function WizardProvider({
     captionColor,
     captionSize,
     captionFont,
+    captionShadow,
     sourceLabel,
     applyVideos,
     roteiros,
     audioPaths,
     matchedOwnImageForRoteiro,
+    watermark,
+    watermarkPosition,
   ]);
 
   const connectEleven = useCallback((name: string) => {
@@ -848,6 +967,11 @@ export function WizardProvider({
       captionColor,
       captionSize,
       captionFont,
+      captionShadow,
+      watermark,
+      watermarkPosition,
+      watermarkUploading,
+      watermarkError,
       videos,
       videoCountStatus,
       buildingVideos,
@@ -883,14 +1007,19 @@ export function WizardProvider({
       uploadRecording,
       skipAudio,
       retryRecording,
+      retryVideo,
       deleteRoteiro,
       toggleSelectedForVideo,
       setSelectedStyle,
       setCaptionColor,
       setCaptionSize,
       setCaptionFont,
+      setCaptionShadow,
       setSceneSecondsForTema,
       setMusicMoodForTema,
+      uploadWatermark,
+      removeWatermark,
+      setWatermarkPosition,
       confirmBuild,
       connectEleven,
       saveWhatsapp,
@@ -940,6 +1069,11 @@ export function WizardProvider({
       captionColor,
       captionSize,
       captionFont,
+      captionShadow,
+      watermark,
+      watermarkPosition,
+      watermarkUploading,
+      watermarkError,
       videos,
       videoCountStatus,
       buildingVideos,
@@ -968,10 +1102,14 @@ export function WizardProvider({
       uploadRecording,
       skipAudio,
       retryRecording,
+      retryVideo,
       deleteRoteiro,
       toggleSelectedForVideo,
       setSceneSecondsForTema,
       setMusicMoodForTema,
+      uploadWatermark,
+      removeWatermark,
+      setWatermarkPosition,
       confirmBuild,
       connectEleven,
       saveWhatsapp,

@@ -14,6 +14,7 @@ const DEFAULT_SCENE_SECONDS = 3;
 const ALLOWED_CAPTION_COLORS = ["auto", "white", "black", "yellow", "red"] as const;
 const ALLOWED_CAPTION_SIZES = ["small", "medium", "large"] as const;
 const ALLOWED_CAPTION_FONTS = ["poppins", "anton", "archivoblack"] as const;
+const ALLOWED_WATERMARK_POSITIONS = ["top-left", "top-right", "bottom-left", "bottom-right"] as const;
 const MAX_IMAGE_SEGMENTS = 30;
 // Padding added to narration/caption duration before splitting into scenes — gives
 // the scene count a little slack instead of exactly matching the spoken content.
@@ -66,8 +67,18 @@ export async function POST(request: Request) {
   const captionColor = ALLOWED_CAPTION_COLORS.includes(body?.captionColor) ? (body.captionColor as string) : "auto";
   const captionSize = ALLOWED_CAPTION_SIZES.includes(body?.captionSize) ? (body.captionSize as string) : "medium";
   const captionFont = ALLOWED_CAPTION_FONTS.includes(body?.captionFont) ? (body.captionFont as string) : "poppins";
+  const captionShadow = body?.captionShadow === true;
+  const watermarkPath = typeof body?.watermarkPath === "string" ? body.watermarkPath : "";
+  const watermarkPosition = ALLOWED_WATERMARK_POSITIONS.includes(body?.watermarkPosition)
+    ? (body.watermarkPosition as string)
+    : "bottom-right";
   const hasAudio = audioPath.length > 0;
-  if ((hasAudio && !audioPath.startsWith(`${user.id}/`)) || !/^https:\/\//.test(imageUrl)) {
+  const hasWatermark = watermarkPath.length > 0;
+  if (
+    (hasAudio && !audioPath.startsWith(`${user.id}/`)) ||
+    (hasWatermark && !watermarkPath.startsWith(`${user.id}/`)) ||
+    !/^https:\/\//.test(imageUrl)
+  ) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
   // No recorded narration: the video falls back to showing the roteiro text as
@@ -136,6 +147,15 @@ export async function POST(request: Request) {
 
     const musicPath = await pickMusicTrack(mood);
 
+    let watermarkFile: string | undefined;
+    if (hasWatermark) {
+      const { data: wmBlob, error: wmErr } = await supabase.storage.from("postime-images").download(watermarkPath);
+      if (!wmErr && wmBlob) {
+        watermarkFile = path.join(dir, "watermark.png");
+        await writeFile(watermarkFile, Buffer.from(await wmBlob.arrayBuffer()));
+      }
+    }
+
     const outputFile = path.join(dir, "output.mp4");
     const durationSeconds = await renderKenBurnsVideo({
       imagePaths: imageFiles,
@@ -146,6 +166,9 @@ export async function POST(request: Request) {
       style,
       captionColor: captionColor === "auto" ? undefined : captionColor,
       captionSize,
+      captionShadow,
+      watermarkPath: watermarkFile,
+      watermarkPosition: watermarkFile ? (watermarkPosition as "top-left" | "top-right" | "bottom-left" | "bottom-right") : undefined,
       captionFont,
       musicPath: musicPath ?? undefined,
     });
@@ -168,7 +191,13 @@ export async function POST(request: Request) {
       .update({ status: "pronto", video_url: videoPath, expires_at: expiresAt })
       .eq("id", job.id);
 
-    return NextResponse.json({ jobId: job.id, videoUrl: signed.signedUrl, expiresAt, durationSeconds });
+    return NextResponse.json({
+      jobId: job.id,
+      videoUrl: signed.signedUrl,
+      videoPath,
+      expiresAt,
+      durationSeconds,
+    });
   } catch (err) {
     console.error("[/api/jobs/render]", err instanceof Error ? err.message : err);
     await supabase.from("jobs").update({ status: "erro", error_message: "render_failed" }).eq("id", job.id);
@@ -176,4 +205,24 @@ export async function POST(request: Request) {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+// Lets the user discard a video they don't like (from the "Regravar" button on
+// any video card, not just failed ones) — deletes the rendered file immediately
+// so a disliked take doesn't linger in storage until its TTL expires.
+export async function DELETE(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const body = await request.json().catch(() => null);
+  const videoPath = typeof body?.videoPath === "string" ? body.videoPath : "";
+  if (!videoPath.startsWith(`${user.id}/`)) {
+    return NextResponse.json({ error: "invalid_input" }, { status: 400 });
+  }
+
+  await supabase.storage.from("postime-videos").remove([videoPath]);
+  return NextResponse.json({ ok: true });
 }

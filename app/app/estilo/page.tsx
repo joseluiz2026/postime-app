@@ -11,10 +11,18 @@ import {
   type MusicMoodSelection,
   type SceneSeconds,
   type StyleName,
+  type WatermarkPosition,
 } from "@/lib/wizard-context";
 import { Btn, Card, Dropzone, FieldLabel, HelpTip, Pill } from "@/components/app/ui";
 
 const SCENE_SECONDS_OPTIONS: SceneSeconds[] = [1, 2, 3, 4, 5];
+
+const WATERMARK_POSITIONS: { id: WatermarkPosition; label: string }[] = [
+  { id: "top-left", label: "Cima esquerda" },
+  { id: "top-right", label: "Cima direita" },
+  { id: "bottom-left", label: "Baixo esquerda" },
+  { id: "bottom-right", label: "Baixo direita" },
+];
 
 const MUSIC_MOOD_OPTIONS: { id: MusicMoodSelection; label: string }[] = [
   { id: "auto", label: "Automático" },
@@ -265,12 +273,21 @@ export default function EstiloPage() {
           ))}
         </div>
         <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Fonte da legenda</span>
-        <div className="flex gap-2">
+        <div className="flex gap-2 mb-4">
           {CAPTION_FONT_OPTIONS.map((f) => (
             <Pill key={f.id} selected={wizard.captionFont === f.id} onClick={() => wizard.setCaptionFont(f.id)}>
               {f.label}
             </Pill>
           ))}
+        </div>
+        <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Sombra na legenda</span>
+        <div className="flex gap-2">
+          <Pill selected={wizard.captionShadow} onClick={() => wizard.setCaptionShadow(true)}>
+            Ativada
+          </Pill>
+          <Pill selected={!wizard.captionShadow} onClick={() => wizard.setCaptionShadow(false)}>
+            Desativada
+          </Pill>
         </div>
       </div>
 
@@ -402,6 +419,68 @@ export default function EstiloPage() {
         )}
       </div>
 
+      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
+        <FieldLabel>
+          Marca d&apos;água / assinatura (opcional)
+          <HelpTip
+            label="Como funciona a marca d'água"
+            text="Envie uma logo em PNG com fundo transparente para aparecer em todos os vídeos gerados, no canto que você escolher."
+          />
+        </FieldLabel>
+        <p className="text-[13px] text-[var(--text-2)] mb-4 leading-relaxed">
+          Sua logo aparece em todos os vídeos desta montagem. <strong>Aviso:</strong> precisa ser um PNG com fundo
+          transparente.
+        </p>
+        {!wizard.watermark ? (
+          <Dropzone
+            icon="photo"
+            title={wizard.watermarkUploading ? "Enviando..." : "Clique para escolher um PNG transparente"}
+            subtitle="PNG com fundo transparente · até 5MB"
+            accept=".png,image/png"
+            onFiles={(files) => wizard.uploadWatermark(files[0])}
+          />
+        ) : (
+          <div className="flex items-center gap-3 bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] rounded-[10px] pl-2 pr-3 py-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={wizard.watermark.url}
+              alt=""
+              className="w-9 h-9 object-contain rounded-md shrink-0 bg-[var(--bg-3)]"
+            />
+            <span className="text-[13px] text-[var(--text-2)] flex-1">Logo enviada</span>
+            <button
+              type="button"
+              aria-label="Remover logo"
+              onClick={wizard.removeWatermark}
+              className="shrink-0 bg-transparent border-none text-[var(--text-3)] cursor-pointer text-sm leading-none flex hover:text-[var(--gold)]"
+            >
+              <Icon name="minus" />
+            </button>
+          </div>
+        )}
+        {wizard.watermarkError && (
+          <p className="text-[13px] text-[var(--gold)] mt-3">
+            <Icon name="alert-triangle" /> {wizard.watermarkError}
+          </p>
+        )}
+        {wizard.watermark && (
+          <div className="mt-4">
+            <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Posição</span>
+            <div className="flex gap-2 flex-wrap">
+              {WATERMARK_POSITIONS.map((p) => (
+                <Pill
+                  key={p.id}
+                  selected={wizard.watermarkPosition === p.id}
+                  onClick={() => wizard.setWatermarkPosition(p.id)}
+                >
+                  {p.label}
+                </Pill>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
       {showWarning && (
         <p className="text-[13px] text-[var(--text-2)] mt-3">
           <Icon name="alert-triangle" /> Selecione ao menos um roteiro salvo na aba Gravação antes de montar o vídeo.
@@ -426,7 +505,12 @@ export default function EstiloPage() {
             const result = await wizard.confirmBuild();
             if (!result.ok) return;
             router.push("/app/download");
-            if (result.failedIndices.length > 0) {
+            if (result.dailyLimitHit) {
+              // A quota problem isn't a recording problem — the buildFailed
+              // ("Regravar") modal would be misleading here, since re-recording
+              // wouldn't fix it. Explain the real cause instead.
+              wizard.openUpgradeModal();
+            } else if (result.failedIndices.length > 0) {
               wizard.openModal({ type: "buildFailed", failedIndices: result.failedIndices });
             }
           }}

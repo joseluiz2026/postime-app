@@ -240,6 +240,7 @@ async function buildCaptionChain(opts: {
   captionColor?: string;
   captionSize?: string;
   captionFont?: string;
+  captionShadow?: boolean;
 }): Promise<{ lines: string[]; outLabel: string }> {
   const cfg = STYLE_CONFIGS[opts.style] ?? STYLE_CONFIGS[DEFAULT_STYLE];
   const fontsize = Math.round(cfg.fontsize * (CAPTION_SIZE_MULTIPLIERS[opts.captionSize ?? "medium"] ?? 1));
@@ -291,6 +292,15 @@ async function buildCaptionChain(opts: {
       const boxcolor = fontcolor === "black" && cfg.boxcolor.includes("black") ? "white@0.75" : cfg.boxcolor;
       parts.push(`box=1`, `boxcolor=${boxcolor}`, `boxborderw=${cfg.boxborderw}`);
     }
+    if (opts.captionShadow) {
+      // drawtext has no true gaussian blur, so this is a soft offset shadow
+      // (semi-transparent, scaled with font size) rather than a blurred one —
+      // a real blur would mean a second pass through ffmpeg's gblur filter per
+      // caption cue, which risks reintroducing the render-time/timeout issues
+      // just fixed. This reads as a soft shadow at normal caption sizes.
+      const shadowOffset = Math.max(2, Math.round(fontsize * 0.035));
+      parts.push(`shadowcolor=black@0.65`, `shadowx=${shadowOffset}`, `shadowy=${shadowOffset}`);
+    }
     parts.push(
       `alpha='if(lt(t,${start}+${fade}),(t-${start})/${fade},if(gt(t,${end}-${fade}),(${end}-t)/${fade},1))'`,
       `enable='between(t,${start},${end})'`,
@@ -331,8 +341,11 @@ export async function renderKenBurnsVideo(opts: {
   captionColor?: string;
   captionSize?: string;
   captionFont?: string;
+  captionShadow?: boolean;
   durationSeconds?: number;
   musicPath?: string;
+  watermarkPath?: string;
+  watermarkPosition?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
 }): Promise<number> {
   if (opts.imagePaths.length === 0) throw new Error("renderKenBurnsVideo: no images provided");
   if (!opts.audioPath && opts.durationSeconds === undefined) {
@@ -367,6 +380,7 @@ export async function renderKenBurnsVideo(opts: {
       captionColor: opts.captionColor,
       captionSize: opts.captionSize,
       captionFont: opts.captionFont,
+      captionShadow: opts.captionShadow,
     });
     filterLines.push(...chain.lines);
     outLabel = chain.outLabel;
@@ -395,6 +409,29 @@ export async function renderKenBurnsVideo(opts: {
   if (narrationInputIndex === null && musicInputIndex === null) {
     args.push("-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
     silentInputIndex = nextInputIndex++;
+  }
+
+  let watermarkInputIndex: number | null = null;
+  if (opts.watermarkPath) {
+    args.push("-i", opts.watermarkPath);
+    watermarkInputIndex = nextInputIndex++;
+  }
+
+  if (watermarkInputIndex !== null) {
+    // Scaled to a fixed width (not proportional to canvas) so the logo reads as
+    // a consistent brand mark regardless of scene count; corner margin keeps it
+    // clear of both the safe-area edges and any caption box.
+    const margin = 24;
+    const watermarkXY: Record<string, string> = {
+      "top-left": `x=${margin}:y=${margin}`,
+      "top-right": `x=main_w-overlay_w-${margin}:y=${margin}`,
+      "bottom-left": `x=${margin}:y=main_h-overlay_h-${margin}`,
+      "bottom-right": `x=main_w-overlay_w-${margin}:y=main_h-overlay_h-${margin}`,
+    };
+    const xy = watermarkXY[opts.watermarkPosition ?? "bottom-right"];
+    filterLines.push(`[${watermarkInputIndex}:v]scale=180:-1[wm]`);
+    filterLines.push(`[${outLabel}][wm]overlay=${xy}[wmout]`);
+    outLabel = "wmout";
   }
 
   let audioMapSpec: string;

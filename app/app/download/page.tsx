@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
-import { useWizard } from "@/lib/wizard-context";
+import { useWizard, type Video } from "@/lib/wizard-context";
 import { useDistribution } from "@/lib/distribution-context";
 import { Btn, Card, HelpTip } from "@/components/app/ui";
 
@@ -17,6 +17,17 @@ export default function DownloadPage() {
   const wizard = useWizard();
   const distribution = useDistribution();
   const router = useRouter();
+
+  function handleRegravar(video: Video) {
+    if (video.videoUrl) {
+      const ok = window.confirm(
+        "Isso vai apagar este vídeo já pronto imediatamente e você vai precisar regravar o áudio. Continuar?",
+      );
+      if (!ok) return;
+    }
+    wizard.retryVideo(video);
+    router.push("/app/gravacao");
+  }
 
   return (
     <>
@@ -55,30 +66,36 @@ export default function DownloadPage() {
                 <div className="p-3">
                   <div className="text-[12.5px] font-medium text-[var(--text-1)] mb-3">{video.title}</div>
                   {video.videoUrl ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      <a
-                        href={video.videoUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_14%,transparent)] border-[color-mix(in_srgb,var(--gold)_30%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_22%,transparent)] cursor-pointer"
+                    <>
+                      <div className="flex flex-wrap gap-1.5">
+                        <a
+                          href={video.videoUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_14%,transparent)] border-[color-mix(in_srgb,var(--gold)_30%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_22%,transparent)] cursor-pointer"
+                        >
+                          Ver
+                        </a>
+                        <a
+                          href={video.videoUrl}
+                          download={`${video.title}.mp4`}
+                          className="flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_32%,transparent)] border-[color-mix(in_srgb,var(--gold)_55%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_42%,transparent)] cursor-pointer"
+                        >
+                          Baixar
+                        </a>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRegravar(video)}
+                        className="w-full mt-1.5 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] border-[var(--line)] text-[var(--text-3)] bg-transparent transition-all hover:border-[var(--gold)] hover:text-[var(--gold)] cursor-pointer"
                       >
-                        Ver
-                      </a>
-                      <a
-                        href={video.videoUrl}
-                        download={`${video.title}.mp4`}
-                        className="flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_32%,transparent)] border-[color-mix(in_srgb,var(--gold)_55%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_42%,transparent)] cursor-pointer"
-                      >
-                        Baixar
-                      </a>
-                    </div>
+                        <Icon name="microphone" /> Regravar
+                      </button>
+                    </>
                   ) : (
                     <button
                       type="button"
-                      onClick={() => {
-                        wizard.retryRecording(video.temaIndex);
-                        router.push("/app/gravacao");
-                      }}
+                      onClick={() => handleRegravar(video)}
                       className="w-full px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_14%,transparent)] border-[color-mix(in_srgb,var(--gold)_30%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_22%,transparent)] cursor-pointer"
                     >
                       <Icon name="microphone" /> Regravar
