@@ -441,6 +441,14 @@ export async function renderKenBurnsVideo(opts: {
     audioMapSpec,
     "-c:v",
     "libx264",
+    // Default "medium" preset was too slow for Vercel's shared serverless CPU —
+    // renders were blowing past the 60s function timeout even for a single,
+    // non-concurrent video. "veryfast" trades some compression efficiency
+    // (slightly bigger file) for a large encode-speed win; output is short-form
+    // vertical video that gets re-compressed by TikTok/social platforms anyway,
+    // so the quality tradeoff is not visually meaningful.
+    "-preset",
+    "veryfast",
     "-pix_fmt",
     "yuv420p",
     "-c:a",
