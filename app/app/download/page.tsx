@@ -29,6 +29,19 @@ export default function DownloadPage() {
     router.push("/app/gravacao");
   }
 
+  async function handleShare(video: Video) {
+    if (!video.videoUrl) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: video.title, url: video.videoUrl });
+      } catch {
+        // user cancelled the native share sheet — nothing to do
+      }
+    } else {
+      await navigator.clipboard.writeText(video.videoUrl);
+    }
+  }
+
   return (
     <>
       <Card>
@@ -45,24 +58,31 @@ export default function DownloadPage() {
           <div className="grid grid-cols-3 gap-4 max-[640px]:grid-cols-2 max-[420px]:grid-cols-1">
             {wizard.videos.map((video) => (
               <div key={video.id} className="border-[0.5px] border-[var(--line)] rounded-xl overflow-hidden transition-all hover:border-[var(--line-strong)] hover:-translate-y-0.5">
-                <div
-                  className="aspect-[9/16] bg-[var(--bg-2)] bg-cover bg-center flex items-center justify-center text-[var(--text-3)] text-[22px] relative"
-                  style={video.imageUrl ? { backgroundImage: `url(${video.imageUrl})` } : undefined}
-                >
-                  {!video.videoUrl ? (
+                {video.videoUrl ? (
+                  <a
+                    href={video.videoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Abrir ${video.title}`}
+                    className="aspect-[9/16] bg-[var(--bg-2)] bg-cover bg-center flex items-center justify-center text-[var(--text-3)] text-[22px] relative cursor-pointer"
+                    style={video.imageUrl ? { backgroundImage: `url(${video.imageUrl})` } : undefined}
+                  >
+                    {!video.imageUrl && <Icon name="player-play" />}
+                    <span className="absolute bottom-2 right-2 font-mono text-[10px] bg-black/55 px-1.5 py-1 rounded-md text-[var(--text-1)]">
+                      {formatDuration(video.durationSeconds)}
+                    </span>
+                  </a>
+                ) : (
+                  <div
+                    className="aspect-[9/16] bg-[var(--bg-2)] bg-cover bg-center flex items-center justify-center text-[var(--text-3)] text-[22px] relative"
+                    style={video.imageUrl ? { backgroundImage: `url(${video.imageUrl})` } : undefined}
+                  >
                     <span className="flex flex-col items-center gap-1.5 text-[var(--gold)] bg-black/55 px-3 py-2 rounded-lg">
                       <Icon name="alert-triangle" />
                       <span className="text-[11px] font-medium">não entregue</span>
                     </span>
-                  ) : (
-                    !video.imageUrl && <Icon name="player-play" />
-                  )}
-                  {video.videoUrl && (
-                    <span className="absolute bottom-2 right-2 font-mono text-[10px] bg-black/55 px-1.5 py-1 rounded-md text-[var(--text-1)]">
-                      {formatDuration(video.durationSeconds)}
-                    </span>
-                  )}
-                </div>
+                  </div>
+                )}
                 <div className="p-3">
                   <div className="text-[12.5px] font-medium text-[var(--text-1)] mb-3">{video.title}</div>
                   {video.videoUrl ? (
@@ -83,6 +103,14 @@ export default function DownloadPage() {
                         >
                           Baixar
                         </a>
+                        <button
+                          type="button"
+                          aria-label="Compartilhar"
+                          onClick={() => handleShare(video)}
+                          className="shrink-0 w-8 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] border-[var(--line)] text-[var(--text-2)] bg-transparent transition-all hover:border-[var(--gold)] hover:text-[var(--gold)] cursor-pointer"
+                        >
+                          <Icon name="share" />
+                        </button>
                       </div>
                       <button
                         type="button"

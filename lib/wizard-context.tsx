@@ -558,7 +558,16 @@ export function WizardProvider({
 
   const applyVideos = useCallback(
     (next: Omit<Video, "id">[], status: string) => {
-      setVideos(next.map((v) => ({ ...v, id: crypto.randomUUID() })));
+      // Merge by temaIndex instead of replacing the whole list — otherwise
+      // rebuilding just one regravado tema would wipe every other video already
+      // sitting in the Download list, even though their files are still alive
+      // in storage until their TTL. Keep everything not touched by this batch.
+      setVideos((prev) => {
+        const nextWithIds = next.map((v) => ({ ...v, id: crypto.randomUUID() }));
+        const nextTemaIndexes = new Set(nextWithIds.map((v) => v.temaIndex));
+        const kept = prev.filter((v) => !nextTemaIndexes.has(v.temaIndex));
+        return [...kept, ...nextWithIds].sort((a, b) => a.temaIndex - b.temaIndex);
+      });
       setVideoCountStatus(status);
       if (next.length > 0 && !whatsappPromptShown.current) {
         whatsappPromptShown.current = true;
