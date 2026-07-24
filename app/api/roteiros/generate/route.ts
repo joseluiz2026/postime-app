@@ -1,8 +1,22 @@
 import { NextResponse } from "next/server";
 import { decryptApiKey } from "@/lib/crypto";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { generateRoteiros, type LlmProvider } from "@/lib/ai/generate-roteiros";
 import { allowedDurationsFor, getAccessPhase, type Duration } from "@/lib/plan";
+
+// Best-effort diagnostic counter — never lets a logging hiccup affect the actual
+// fallback flow. Vercel's own log retention is too short to answer "how often does
+// this actually fire", so this persists it instead (see project memory).
+async function logFallbackEvent(fromProvider: string, toProvider: string | null, reason: string) {
+  try {
+    await createAdminClient()
+      .from("fallback_events")
+      .insert({ from_provider: fromProvider, to_provider: toProvider, reason: reason.slice(0, 500) });
+  } catch {
+    // diagnostic only
+  }
+}
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -81,6 +95,7 @@ export async function POST(request: Request) {
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
       console.error("[/api/roteiros/generate] Groq pool key failed, falling back to Gemini:", message);
+      await logFallbackEvent("groq", googleKey ? "google" : null, message);
     }
   }
 
@@ -91,6 +106,7 @@ export async function POST(request: Request) {
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
       console.error("[/api/roteiros/generate] Gemini fallback also failed:", message);
+      await logFallbackEvent("google", null, message);
     }
   }
 
