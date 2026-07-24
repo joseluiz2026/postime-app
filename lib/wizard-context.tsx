@@ -59,8 +59,7 @@ export type ModalId =
   | "eleven"
   | "account"
   | "whatsapp"
-  | "tiktok"
-  | "autoProgress";
+  | "tiktok";
 
 export type AccountModalType = "password" | "report" | "faq" | "support";
 
@@ -70,8 +69,7 @@ type ModalState =
   | { type: "eleven" }
   | { type: "account"; accountType: AccountModalType }
   | { type: "whatsapp" }
-  | { type: "tiktok" }
-  | { type: "autoProgress"; onDone: () => void | Promise<void> };
+  | { type: "tiktok" };
 
 function normalizeForMatch(str: string): string {
   return str
@@ -193,8 +191,6 @@ type WizardContextValue = WizardState & {
   buildingVideos: boolean;
   buildProgress: { completed: number; total: number } | null;
   buildError: string | null;
-
-  clickAutoGenerate: () => void;
 
   connectEleven: (name: string) => void;
   saveWhatsapp: () => void;
@@ -712,52 +708,6 @@ export function WizardProvider({
     matchedOwnImageForRoteiro,
   ]);
 
-  const clickAutoGenerate = useCallback(() => {
-    if (accessPhase === "locked") {
-      openModal({ type: "upgrade" });
-      return;
-    }
-    const n = 3;
-    openModal({
-      type: "autoProgress",
-      onDone: async () => {
-        setGenerating(true);
-        setGenerateError(null);
-        try {
-          const res = await fetch("/api/roteiros/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ qty: n, duration, sourceType, sourceText: requestSourceText() }),
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            if (data.error === "access_locked") {
-              openModal({ type: "upgrade" });
-            } else if (data.error === "duration_not_allowed") {
-              setGenerateError("Essa duração só está disponível nos primeiros 7 dias ou com assinatura ativa.");
-            } else {
-              setGenerateError("Não foi possível gerar agora.");
-            }
-            return;
-          }
-          setRoteiros(data.roteiros);
-          resetVideoTracking(data.roteiros.length);
-          setSavedTemas(new Array(data.roteiros.length).fill(true));
-          const label = sourceLabel() ?? "fonte selecionada";
-          applyVideos(
-            data.roteiros.map((_: Roteiro, i: number) => ({ title: `Tema ${String(i + 1).padStart(2, "0")}` })),
-            `${data.roteiros.length} vídeos gerados hoje · fonte: ${label}`,
-          );
-        } catch {
-          setGenerateError("Falha de conexão. Tente novamente.");
-        } finally {
-          setGenerating(false);
-          closeModal();
-        }
-      },
-    });
-  }, [accessPhase, duration, sourceType, requestSourceText, openModal, resetVideoTracking, sourceLabel, applyVideos, closeModal]);
-
   const connectEleven = useCallback((name: string) => {
     setVoiceCloned(true);
     setSelectedVoiceName(name);
@@ -870,7 +820,6 @@ export function WizardProvider({
       setSceneSecondsForTema,
       setMusicMoodForTema,
       confirmBuild,
-      clickAutoGenerate,
       connectEleven,
       saveWhatsapp,
       openModal,
@@ -948,7 +897,6 @@ export function WizardProvider({
       setSceneSecondsForTema,
       setMusicMoodForTema,
       confirmBuild,
-      clickAutoGenerate,
       connectEleven,
       saveWhatsapp,
       openModal,

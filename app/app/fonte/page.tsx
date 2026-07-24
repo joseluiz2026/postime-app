@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { useWizard, type SourceType } from "@/lib/wizard-context";
-import { Btn, Card, Dropzone, FieldLabel, HelpTip, TextArea, TextInput } from "@/components/app/ui";
+import { Btn, Card, Dropzone, FieldLabel, TextArea, TextInput } from "@/components/app/ui";
 
 const SOURCES: { id: SourceType; icon: string; title: string; desc: string }[] = [
   { id: "ebook", icon: "file-text", title: "Upload de ebook", desc: "PDF ou texto próprio como base de conteúdo." },
@@ -128,13 +128,6 @@ export default function FontePage() {
             <Icon name={SRC_ICON[wizard.sourceType]} /> {label ?? "nenhum arquivo selecionado"}
           </span>
           <div className="flex gap-1.5 items-center">
-            <Btn onClick={wizard.clickAutoGenerate}>
-              <Icon name="bolt" /> Gerar automático
-            </Btn>
-            <HelpTip
-              label="O que Gerar automático faz"
-              text='Roda o processo inteiro sozinho — roteiros, imagens, narração e montagem — e te leva direto pros vídeos prontos. Use "Extrair temas" se preferir revisar cada etapa manualmente.'
-            />
             <Btn variant="primary" className="ml-1" onClick={() => router.push("/app/roteiros")}>
               Extrair temas <Icon name="arrow-right" />
             </Btn>

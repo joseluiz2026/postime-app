@@ -1,5 +1,4 @@
 import { AccountModal } from "./AccountModal";
-import { AutoProgressModal } from "./AutoProgressModal";
 import { ElevenModal } from "./ElevenModal";
 import { TiktokModal } from "./TiktokModal";
 import { UpgradeModal } from "./UpgradeModal";
@@ -13,7 +12,6 @@ export function WizardModals() {
       <TiktokModal />
       <AccountModal />
       <WhatsappModal />
-      <AutoProgressModal />
     </>
   );
 }
