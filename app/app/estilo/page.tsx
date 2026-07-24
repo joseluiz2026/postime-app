@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/lib/icons";
 import {
   useWizard,
@@ -126,6 +126,50 @@ const STYLES: { name: StyleName; desc: string; preview: React.ReactNode }[] = [
   },
 ];
 
+/**
+ * Real progress only ticks in whole-video steps (0/3, 1/3, ...), which can sit
+ * frozen for the 10-60s a single render takes. This eases the displayed percent
+ * toward (but never reaching) the next step so the bar keeps visibly moving
+ * while a video is still processing, then snaps forward for real once it lands.
+ */
+function useSmoothBuildProgress(active: boolean, completed: number, total: number) {
+  const [pct, setPct] = useState(0);
+  const sliceStartRef = useRef(0);
+  const prevCompletedRef = useRef(completed);
+  const prevActiveRef = useRef(active);
+
+  useEffect(() => {
+    const justStarted = active && !prevActiveRef.current;
+    const completedChanged = completed !== prevCompletedRef.current;
+    if (justStarted || completedChanged) sliceStartRef.current = Date.now();
+    prevActiveRef.current = active;
+    prevCompletedRef.current = completed;
+
+    if (!active || total === 0) {
+      const raf = requestAnimationFrame(() => setPct(0));
+      return () => cancelAnimationFrame(raf);
+    }
+    if (completed >= total) {
+      const raf = requestAnimationFrame(() => setPct(100));
+      return () => cancelAnimationFrame(raf);
+    }
+
+    let raf: number;
+    const slice = 100 / total;
+    const baseline = completed * slice;
+    const tick = () => {
+      const elapsed = Date.now() - sliceStartRef.current;
+      const withinSlice = slice * 0.92 * (1 - Math.exp(-elapsed / 9000));
+      setPct(baseline + withinSlice);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [active, completed, total]);
+
+  return pct;
+}
+
 export default function EstiloPage() {
   const wizard = useWizard();
   const router = useRouter();
@@ -137,6 +181,11 @@ export default function EstiloPage() {
   const matchedTemas = wizard.selectedForVideo
     .map((i) => ({ i, img: wizard.matchedOwnImageForRoteiro(i) }))
     .filter((x): x is { i: number; img: NonNullable<typeof x.img> } => Boolean(x.img));
+  const smoothProgressPct = useSmoothBuildProgress(
+    wizard.buildingVideos,
+    wizard.buildProgress?.completed ?? 0,
+    wizard.buildProgress?.total ?? 0,
+  );
 
   if (n !== prevN) {
     setPrevN(n);
@@ -374,8 +423,12 @@ export default function EstiloPage() {
               setShowWarning(true);
               return;
             }
-            const built = await wizard.confirmBuild();
-            if (built) router.push("/app/download");
+            const result = await wizard.confirmBuild();
+            if (!result.ok) return;
+            router.push("/app/download");
+            if (result.failedIndices.length > 0) {
+              wizard.openModal({ type: "buildFailed", failedIndices: result.failedIndices });
+            }
           }}
         >
           <Icon name={wizard.buildingVideos ? "loader-2" : "arrow-right"} spin={wizard.buildingVideos} />{" "}
@@ -390,14 +443,12 @@ export default function EstiloPage() {
                 {wizard.buildProgress.total === 1 ? "" : "s"} pronto
                 {wizard.buildProgress.total === 1 ? "" : "s"}
               </span>
-              <span className="text-[12px] font-mono text-[var(--text-2)]">
-                {Math.round((wizard.buildProgress.completed / wizard.buildProgress.total) * 100)}%
-              </span>
+              <span className="text-[12px] font-mono text-[var(--text-2)]">{Math.round(smoothProgressPct)}%</span>
             </div>
             <div className="w-full h-2 rounded-full bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] overflow-hidden">
               <div
-                className="h-full bg-[var(--gold)] transition-[width] duration-500 ease-out"
-                style={{ width: `${(wizard.buildProgress.completed / wizard.buildProgress.total) * 100}%` }}
+                className="postime-progress-fill h-full bg-[var(--gold)] transition-[width] duration-300 ease-out"
+                style={{ width: `${smoothProgressPct}%` }}
               />
             </div>
           </div>

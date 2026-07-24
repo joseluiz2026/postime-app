@@ -146,3 +146,23 @@ a {
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+@keyframes postime-progress-stripes {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 28px 0;
+  }
+}
+
+.postime-progress-fill {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.22) 0,
+    rgba(255, 255, 255, 0.22) 9px,
+    transparent 9px,
+    transparent 18px
+  );
+  animation: postime-progress-stripes 0.7s linear infinite;
+}

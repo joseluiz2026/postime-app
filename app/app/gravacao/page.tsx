@@ -340,34 +340,39 @@ export default function GravacaoPage() {
 
         <div className="w-full max-w-[420px] mt-8 text-left flex flex-col gap-2">
           {slides.map((_, i) => {
+            const isFailed = wizard.failedTemas[i];
             const isDone = wizard.savedTemas[i];
             const isUsed = wizard.usedTemas[i];
             const isCurrent = i === idx && !isDone;
             const isChecked = wizard.selectedForVideo.includes(i);
             const hasAudio = Boolean(wizard.audioPaths[i]);
-            const label = isUsed
-              ? "já usado em vídeo"
-              : isDone
-                ? hasAudio
-                  ? "salvo"
-                  : "texto no vídeo"
-                : isCurrent
-                  ? "em andamento"
-                  : "pendente";
+            const label = isFailed
+              ? "vídeo não entregue"
+              : isUsed
+                ? "já usado em vídeo"
+                : isDone
+                  ? hasAudio
+                    ? "salvo"
+                    : "texto no vídeo"
+                  : isCurrent
+                    ? "em andamento"
+                    : "pendente";
             return (
               <div
                 key={i}
                 className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-[10px] border-[0.5px] text-[13px] transition-all ${
-                  isUsed
-                    ? "opacity-45 border-[var(--line)] text-[var(--text-2)]"
-                    : isDone
-                      ? "border-[var(--teal)] text-[var(--text-1)] bg-[var(--bg-2)]"
-                      : isCurrent
-                        ? "border-[var(--gold)] text-[var(--text-1)] bg-[var(--bg-2)]"
-                        : "border-[var(--line)] text-[var(--text-2)] bg-[var(--bg-2)]"
+                  isFailed
+                    ? "border-[var(--gold)] text-[var(--text-1)] bg-[color-mix(in_srgb,var(--gold)_8%,transparent)]"
+                    : isUsed
+                      ? "opacity-45 border-[var(--line)] text-[var(--text-2)]"
+                      : isDone
+                        ? "border-[var(--teal)] text-[var(--text-1)] bg-[var(--bg-2)]"
+                        : isCurrent
+                          ? "border-[var(--gold)] text-[var(--text-1)] bg-[var(--bg-2)]"
+                          : "border-[var(--line)] text-[var(--text-2)] bg-[var(--bg-2)]"
                 }`}
               >
-                {isDone && !isUsed ? (
+                {isDone && !isUsed && !isFailed ? (
                   <input
                     type="checkbox"
                     checked={isChecked}
@@ -379,20 +384,37 @@ export default function GravacaoPage() {
                 )}
                 <span
                   className={`w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center text-[11px] shrink-0 ${
-                    isUsed
-                      ? "bg-[var(--bg-3)] border-[var(--line-strong)] text-[var(--text-3)]"
-                      : isDone
-                        ? "bg-[var(--teal)] border-[var(--teal)] text-[#1a1a1a]"
-                        : isCurrent
-                          ? "border-[var(--gold)] text-transparent"
-                          : "border-[var(--line-strong)] text-transparent"
+                    isFailed
+                      ? "bg-[var(--gold)] border-[var(--gold)] text-[#1a1a1a]"
+                      : isUsed
+                        ? "bg-[var(--bg-3)] border-[var(--line-strong)] text-[var(--text-3)]"
+                        : isDone
+                          ? "bg-[var(--teal)] border-[var(--teal)] text-[#1a1a1a]"
+                          : isCurrent
+                            ? "border-[var(--gold)] text-transparent"
+                            : "border-[var(--line-strong)] text-transparent"
                   }`}
                 >
-                  {isUsed ? <Icon name="lock" /> : isDone ? <Icon name="check" /> : null}
+                  {isFailed ? (
+                    <Icon name="alert-triangle" />
+                  ) : isUsed ? (
+                    <Icon name="lock" />
+                  ) : isDone ? (
+                    <Icon name="check" />
+                  ) : null}
                 </span>
-                <span>
+                <span className="flex-1">
                   Tema {String(i + 1).padStart(2, "0")} · {label}
                 </span>
+                {isFailed && (
+                  <button
+                    type="button"
+                    onClick={() => wizard.retryRecording(i)}
+                    className="shrink-0 text-[12px] font-medium text-[var(--gold)] bg-transparent border-none cursor-pointer underline decoration-dotted hover:opacity-80"
+                  >
+                    Deseja regravar?
+                  </button>
+                )}
               </div>
             );
           })}

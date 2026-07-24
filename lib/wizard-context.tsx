@@ -46,6 +46,7 @@ export type Roteiro = { meta: string; text: string; mood?: MusicMood };
 export type Video = {
   id: string;
   title: string;
+  temaIndex: number;
   style?: string;
   imageUrl?: string;
   imageCredit?: string;
@@ -59,7 +60,8 @@ export type ModalId =
   | "eleven"
   | "account"
   | "whatsapp"
-  | "tiktok";
+  | "tiktok"
+  | "buildFailed";
 
 export type AccountModalType = "password" | "report" | "faq" | "support";
 
@@ -69,7 +71,8 @@ type ModalState =
   | { type: "eleven" }
   | { type: "account"; accountType: AccountModalType }
   | { type: "whatsapp" }
-  | { type: "tiktok" };
+  | { type: "tiktok" }
+  | { type: "buildFailed"; failedIndices: number[] };
 
 function normalizeForMatch(str: string): string {
   return str
@@ -124,6 +127,7 @@ type WizardState = {
   scriptIndex: number;
   savedTemas: boolean[];
   usedTemas: boolean[];
+  failedTemas: boolean[];
   selectedForVideo: number[];
   audioPaths: (string | null)[];
   audioUploading: boolean;
@@ -179,6 +183,7 @@ type WizardContextValue = WizardState & {
   setScriptIndex: (i: number) => void;
   uploadRecording: (idx: number, file: Blob, ext: string) => Promise<boolean>;
   skipAudio: (idx: number) => void;
+  retryRecording: (idx: number) => void;
   toggleSelectedForVideo: (idx: number) => void;
 
   setSelectedStyle: (s: StyleName) => void;
@@ -187,7 +192,7 @@ type WizardContextValue = WizardState & {
   setCaptionFont: (f: CaptionFont) => void;
   setSceneSecondsForTema: (idx: number, s: SceneSeconds) => void;
   setMusicMoodForTema: (idx: number, m: MusicMoodSelection) => void;
-  confirmBuild: () => Promise<boolean>;
+  confirmBuild: () => Promise<{ ok: boolean; failedIndices: number[] }>;
   buildingVideos: boolean;
   buildProgress: { completed: number; total: number } | null;
   buildError: string | null;
@@ -255,6 +260,7 @@ export function WizardProvider({
   const [scriptIndex, setScriptIndex] = useState(0);
   const [savedTemas, setSavedTemas] = useState<boolean[]>([]);
   const [usedTemas, setUsedTemas] = useState<boolean[]>([]);
+  const [failedTemas, setFailedTemas] = useState<boolean[]>([]);
   const [selectedForVideo, setSelectedForVideo] = useState<number[]>([]);
   const [audioPaths, setAudioPaths] = useState<(string | null)[]>([]);
   const [audioUploading, setAudioUploading] = useState(false);
@@ -451,6 +457,7 @@ export function WizardProvider({
     setScriptIndex(0);
     setSavedTemas(new Array(n).fill(false));
     setUsedTemas(new Array(n).fill(false));
+    setFailedTemas(new Array(n).fill(false));
     setSelectedForVideo([]);
     setAudioPaths(new Array(n).fill(null));
     setSceneSecondsByTema(new Array(n).fill(3));
@@ -463,10 +470,12 @@ export function WizardProvider({
       setVideoCountStatus(status);
       if (next.length > 0 && !whatsappPromptShown.current) {
         whatsappPromptShown.current = true;
-        setTimeout(() => openModal({ type: "whatsapp" }), 600);
+        // Don't clobber a modal that opened in the meantime (e.g. the "regravar"
+        // alert for a failed video) — only take the slot if it's still free.
+        setTimeout(() => setModal((current) => (current.type === null ? { type: "whatsapp" } : current)), 600);
       }
     },
-    [openModal],
+    [],
   );
 
   const editRoteiroText = useCallback((idx: number, text: string) => {
@@ -587,12 +596,27 @@ export function WizardProvider({
     [roteiros.length],
   );
 
+  /**
+   * Undoes a tema's saved recording (whether it was a real audio take or a
+   * skipped/text-only entry) so it goes back through the recording flow —
+   * the only way today to fix a video that failed to render, without having
+   * to regenerate the roteiro text from scratch.
+   */
+  const retryRecording = useCallback((idx: number) => {
+    setSavedTemas((prev) => prev.map((v, i) => (i === idx ? false : v)));
+    setUsedTemas((prev) => prev.map((v, i) => (i === idx ? false : v)));
+    setFailedTemas((prev) => prev.map((v, i) => (i === idx ? false : v)));
+    setAudioPaths((prev) => prev.map((v, i) => (i === idx ? null : v)));
+    setSelectedForVideo((prev) => prev.filter((i) => i !== idx));
+    setScriptIndex(idx);
+  }, []);
+
   const toggleSelectedForVideo = useCallback((idx: number) => {
     setSelectedForVideo((prev) => (prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]));
   }, []);
 
-  const confirmBuild = useCallback(async (): Promise<boolean> => {
-    if (selectedForVideo.length === 0) return false;
+  const confirmBuild = useCallback(async (): Promise<{ ok: boolean; failedIndices: number[] }> => {
+    if (selectedForVideo.length === 0) return { ok: false, failedIndices: [] };
     const indices = [...selectedForVideo].sort((a, b) => a - b);
     setBuildingVideos(true);
     setBuildError(null);
@@ -615,7 +639,7 @@ export function WizardProvider({
         const data = await res.json();
         if (!res.ok) {
           setBuildError("Não foi possível buscar as imagens agora. Tente novamente.");
-          return false;
+          return { ok: false, failedIndices: [] };
         }
         fetchedImages = data.images;
       }
@@ -635,6 +659,7 @@ export function WizardProvider({
           const image = imageByIndex.get(i);
           const base: Omit<Video, "id"> = {
             title: `Tema ${String(i + 1).padStart(2, "0")} · ${selectedStyle}`,
+            temaIndex: i,
             style: selectedStyle,
             imageUrl: image?.url,
             imageCredit: image?.photographer,
@@ -680,15 +705,26 @@ export function WizardProvider({
       );
       const label = sourceLabel() ?? "fonte selecionada";
       applyVideos(built, `${indices.length} vídeos gerados hoje · estilo ${selectedStyle} · fonte: ${label}`);
-      setUsedTemas((prev) => prev.map((v, i) => (indices.includes(i) ? true : v)));
+
+      // A video without a videoUrl wasn't actually delivered. Only lock a tema as
+      // "used" when it truly produced a video — otherwise it stays stuck forever
+      // with no way to fix it short of regenerating the roteiro from scratch.
+      // Videos cut off by the daily limit aren't a recording problem, so they're
+      // excluded from the "regravar" prompt — they just stay unlocked to retry later.
+      const deliveredIndices = new Set(built.filter((v) => v.videoUrl).map((v) => v.temaIndex));
+      const failedIndices = dailyLimitHit ? [] : indices.filter((i) => !deliveredIndices.has(i));
+      setUsedTemas((prev) => prev.map((v, i) => (deliveredIndices.has(i) ? true : v)));
+      setFailedTemas((prev) =>
+        prev.map((v, i) => (failedIndices.includes(i) ? true : indices.includes(i) ? false : v)),
+      );
       setSelectedForVideo([]);
       if (dailyLimitHit) {
         setBuildError("Você atingiu o limite de vídeos de hoje. Volte amanhã ou assine para continuar sem limite.");
       }
-      return true;
+      return { ok: true, failedIndices };
     } catch {
       setBuildError("Falha de conexão. Tente novamente.");
-      return false;
+      return { ok: false, failedIndices: [] };
     } finally {
       setBuildProgress(null);
       setBuildingVideos(false);
@@ -768,6 +804,7 @@ export function WizardProvider({
       scriptIndex,
       savedTemas,
       usedTemas,
+      failedTemas,
       selectedForVideo,
       audioPaths,
       audioUploading,
@@ -812,6 +849,7 @@ export function WizardProvider({
       setScriptIndex,
       uploadRecording,
       skipAudio,
+      retryRecording,
       toggleSelectedForVideo,
       setSelectedStyle,
       setCaptionColor,
@@ -856,6 +894,7 @@ export function WizardProvider({
       scriptIndex,
       savedTemas,
       usedTemas,
+      failedTemas,
       selectedForVideo,
       audioPaths,
       audioUploading,
@@ -893,6 +932,7 @@ export function WizardProvider({
       clickGerar,
       uploadRecording,
       skipAudio,
+      retryRecording,
       toggleSelectedForVideo,
       setSceneSecondsForTema,
       setMusicMoodForTema,
