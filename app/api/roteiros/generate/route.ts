@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null);
   const qty = Math.max(1, Math.min(20, Number(body?.qty) || 1));
-  const requestedDuration = (["15s", "30s", "60s"] as const).includes(body?.duration)
+  const requestedDuration = (["15s", "30s"] as const).includes(body?.duration)
     ? (body.duration as Duration)
     : "15s";
   const sourceType = String(body?.sourceType ?? "");

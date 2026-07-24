@@ -55,7 +55,7 @@ export default function RoteirosPage() {
         <div>
           <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Duração</span>
           <div className="flex gap-2">
-            {(["15s", "30s", "60s"] as const).map((d) => {
+            {(["15s", "30s"] as const).map((d) => {
               const allowed = wizard.allowedDurations.includes(d);
               return (
                 <Pill

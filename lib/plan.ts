@@ -1,4 +1,8 @@
-export type Duration = "15s" | "30s" | "60s";
+// 60s dropped (2026-07-24): render time scales with duration (more frames, more
+// image segments, more caption cues), and a full-length video left too little
+// margin against the platform's 60s function timeout even with a faster ffmpeg
+// preset — the render would sometimes need to finish faster than the video itself.
+export type Duration = "15s" | "30s";
 
 /** Days 1-7 from signup: up to TRIAL_DAILY_VIDEOS videos/day, any duration. */
 export const TRIAL_DAYS = 7;
@@ -14,7 +18,7 @@ export const FREE_DAYS = 7;
 export const FREE_DAILY_VIDEOS = 2;
 export const FREE_DURATIONS: readonly Duration[] = ["15s"];
 
-export const ALL_DURATIONS: readonly Duration[] = ["15s", "30s", "60s"];
+export const ALL_DURATIONS: readonly Duration[] = ["15s", "30s"];
 
 export type AccessPhase = "trial" | "free" | "locked";
 

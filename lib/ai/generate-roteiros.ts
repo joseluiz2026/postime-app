@@ -41,17 +41,16 @@ function resolveModel(provider: LlmProvider, apiKey: string) {
   }
 }
 
-const DURATION_WORDS: Record<"15s" | "30s" | "60s", string> = {
+const DURATION_WORDS: Record<"15s" | "30s", string> = {
   "15s": "35 a 55 palavras (para leitura em aproximadamente 15 segundos)",
   "30s": "70 a 110 palavras (para leitura em aproximadamente 30 segundos)",
-  "60s": "140 a 220 palavras (para leitura em aproximadamente 60 segundos)",
 };
 
 export async function generateRoteiros(opts: {
   provider: LlmProvider;
   apiKey: string;
   qty: number;
-  duration: "15s" | "30s" | "60s";
+  duration: "15s" | "30s";
   sourceHint: string;
   sourceIsRealContent: boolean;
 }) {
