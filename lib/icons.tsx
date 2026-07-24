@@ -41,6 +41,8 @@ const ICON_PATHS: Record<string, string> = {
   rocket: '<path d="M5 19l1.5-4.5L12 9l4.5 4.5L11 15z"/><path d="M12 9a5 5 0 0 1 5-5c1 3 0 6-2 8"/>',
   share: '<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4"/><path d="M8.2 13.2l7.6 4.4"/>',
   search: '<circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6"/>',
+  trash:
+    '<path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/>',
   "brand-whatsapp": '<path d="M4 20l1.4-4.2A8 8 0 1 1 9 19.5z"/><path d="M9 9c0 3 3 6 6 6c.5 0 1-.5 1-1.2c0-.3-.2-.5-.5-.7l-1.6-.9c-.3-.2-.6-.1-.8.1l-.5.6c-1-.6-1.9-1.5-2.5-2.5l.6-.5c.2-.2.3-.5.1-.8l-.9-1.6c-.2-.3-.4-.5-.7-.5C9.5 7 9 7.5 9 8z"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4.8 1c0 1.5-2.3 1.8-2.3 3.5"/><path d="M12 17h.01"/>',
   "message-bot": '<rect x="4" y="5" width="16" height="11" rx="3"/><path d="M8 21l4-4l4 4"/><path d="M9 10h.01"/><path d="M15 10h.01"/>',

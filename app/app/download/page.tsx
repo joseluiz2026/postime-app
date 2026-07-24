@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { useWizard } from "@/lib/wizard-context";
 import { useDistribution } from "@/lib/distribution-context";
@@ -15,6 +16,7 @@ function formatDuration(seconds?: number): string {
 export default function DownloadPage() {
   const wizard = useWizard();
   const distribution = useDistribution();
+  const router = useRouter();
 
   return (
     <>
@@ -36,36 +38,52 @@ export default function DownloadPage() {
                   className="aspect-[9/16] bg-[var(--bg-2)] bg-cover bg-center flex items-center justify-center text-[var(--text-3)] text-[22px] relative"
                   style={video.imageUrl ? { backgroundImage: `url(${video.imageUrl})` } : undefined}
                 >
-                  {!video.imageUrl && <Icon name="player-play" />}
-                  <span className="absolute bottom-2 right-2 font-mono text-[10px] bg-black/55 px-1.5 py-1 rounded-md text-[var(--text-1)]">
-                    {formatDuration(video.durationSeconds)}
-                  </span>
+                  {!video.videoUrl ? (
+                    <span className="flex flex-col items-center gap-1.5 text-[var(--gold)] bg-black/55 px-3 py-2 rounded-lg">
+                      <Icon name="alert-triangle" />
+                      <span className="text-[11px] font-medium">não entregue</span>
+                    </span>
+                  ) : (
+                    !video.imageUrl && <Icon name="player-play" />
+                  )}
+                  {video.videoUrl && (
+                    <span className="absolute bottom-2 right-2 font-mono text-[10px] bg-black/55 px-1.5 py-1 rounded-md text-[var(--text-1)]">
+                      {formatDuration(video.durationSeconds)}
+                    </span>
+                  )}
                 </div>
                 <div className="p-3">
                   <div className="text-[12.5px] font-medium text-[var(--text-1)] mb-3">{video.title}</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <a
-                      href={video.videoUrl ?? undefined}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-disabled={!video.videoUrl}
-                      className={`flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_14%,transparent)] border-[color-mix(in_srgb,var(--gold)_30%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_22%,transparent)] ${
-                        video.videoUrl ? "cursor-pointer" : "opacity-40 pointer-events-none"
-                      }`}
+                  {video.videoUrl ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      <a
+                        href={video.videoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_14%,transparent)] border-[color-mix(in_srgb,var(--gold)_30%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_22%,transparent)] cursor-pointer"
+                      >
+                        Ver
+                      </a>
+                      <a
+                        href={video.videoUrl}
+                        download={`${video.title}.mp4`}
+                        className="flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_32%,transparent)] border-[color-mix(in_srgb,var(--gold)_55%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_42%,transparent)] cursor-pointer"
+                      >
+                        Baixar
+                      </a>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        wizard.retryRecording(video.temaIndex);
+                        router.push("/app/gravacao");
+                      }}
+                      className="w-full px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_14%,transparent)] border-[color-mix(in_srgb,var(--gold)_30%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_22%,transparent)] cursor-pointer"
                     >
-                      Ver
-                    </a>
-                    <a
-                      href={video.videoUrl ?? undefined}
-                      download={video.videoUrl ? `${video.title}.mp4` : undefined}
-                      aria-disabled={!video.videoUrl}
-                      className={`flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_32%,transparent)] border-[color-mix(in_srgb,var(--gold)_55%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_42%,transparent)] ${
-                        video.videoUrl ? "cursor-pointer" : "opacity-40 pointer-events-none"
-                      }`}
-                    >
-                      Baixar
-                    </a>
-                  </div>
+                      <Icon name="microphone" /> Regravar
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

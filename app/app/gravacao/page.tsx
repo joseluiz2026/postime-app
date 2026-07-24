@@ -35,7 +35,12 @@ export default function GravacaoPage() {
 
   const slides = wizard.roteiros;
   const idx = wizard.scriptIndex;
-  const current = slides[idx];
+  const current = wizard.deletedTemas[idx] ? undefined : slides[idx];
+  const visibleIndices = slides.map((_, i) => i).filter((i) => !wizard.deletedTemas[i]);
+  const visiblePos = visibleIndices.indexOf(idx);
+  const prevVisibleIdx = visiblePos > 0 ? visibleIndices[visiblePos - 1] : null;
+  const nextVisibleIdx =
+    visiblePos >= 0 && visiblePos < visibleIndices.length - 1 ? visibleIndices[visiblePos + 1] : null;
 
   function clearTimer() {
     if (timerRef.current) {
@@ -154,17 +159,17 @@ export default function GravacaoPage() {
     if (!source) return;
     stopPlayback();
     const ext = mode === "upload" ? "mp3" : recordedBlob?.type.includes("webm") ? "webm" : "m4a";
-    const wasLast = idx >= slides.length - 1;
     const ok = await wizard.uploadRecording(idx, source, ext);
     if (!ok) return;
-    if (wasLast) setAllDone(true);
+    if (nextVisibleIdx !== null) wizard.setScriptIndex(nextVisibleIdx);
+    else setAllDone(true);
     resetRec();
   }
 
   function skip() {
-    const wasLast = idx >= slides.length - 1;
     wizard.skipAudio(idx);
-    if (wasLast) setAllDone(true);
+    if (nextVisibleIdx !== null) wizard.setScriptIndex(nextVisibleIdx);
+    else setAllDone(true);
     resetRec();
   }
 
@@ -191,29 +196,29 @@ export default function GravacaoPage() {
         <div className="relative w-full max-w-[520px] mt-6">
           <button
             aria-label="Roteiro anterior"
-            disabled={idx === 0}
-            onClick={() => goTo(idx - 1)}
+            disabled={prevVisibleIdx === null}
+            onClick={() => prevVisibleIdx !== null && goTo(prevVisibleIdx)}
             className="absolute top-1/2 -translate-y-1/2 -left-2 w-10 h-10 rounded-full border-[1.5px] border-[var(--line-strong)] bg-[var(--bg-1)] text-[var(--text-1)] flex items-center justify-center text-[17px] cursor-pointer shadow-[0_6px_18px_rgba(0,0,0,0.4)] z-[2] transition-all hover:border-[var(--gold)] hover:text-[var(--gold)] disabled:opacity-25 disabled:cursor-not-allowed"
           >
             <Icon name="chevron-left" />
           </button>
           <div className="bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] rounded-[14px] px-[52px] py-5 min-h-[96px] text-left">
             <div className="font-mono text-[11px] tracking-wide text-[var(--teal)] mb-1.5">
-              {current.meta} · {idx + 1} DE {slides.length}
+              {current.meta} · {visiblePos + 1} DE {visibleIndices.length}
             </div>
             <div className="text-[14.5px] leading-relaxed text-[var(--text-1)]">{current.text}</div>
           </div>
           <button
             aria-label="Próximo roteiro"
-            disabled={idx === slides.length - 1}
-            onClick={() => goTo(idx + 1)}
+            disabled={nextVisibleIdx === null}
+            onClick={() => nextVisibleIdx !== null && goTo(nextVisibleIdx)}
             className="absolute top-1/2 -translate-y-1/2 -right-2 w-10 h-10 rounded-full border-[1.5px] border-[var(--line-strong)] bg-[var(--bg-1)] text-[var(--text-1)] flex items-center justify-center text-[17px] cursor-pointer shadow-[0_6px_18px_rgba(0,0,0,0.4)] z-[2] transition-all hover:border-[var(--gold)] hover:text-[var(--gold)] disabled:opacity-25 disabled:cursor-not-allowed"
           >
             <Icon name="chevron-right" />
           </button>
         </div>
         <div className="flex gap-1.5 mt-3 justify-center">
-          {slides.map((_, i) => (
+          {visibleIndices.map((i) => (
             <button
               key={i}
               aria-label={`Ir para roteiro ${i + 1}`}
@@ -339,7 +344,7 @@ export default function GravacaoPage() {
         )}
 
         <div className="w-full max-w-[420px] mt-8 text-left flex flex-col gap-2">
-          {slides.map((_, i) => {
+          {visibleIndices.map((i) => {
             const isFailed = wizard.failedTemas[i];
             const isDone = wizard.savedTemas[i];
             const isUsed = wizard.usedTemas[i];
@@ -415,6 +420,14 @@ export default function GravacaoPage() {
                     Deseja regravar?
                   </button>
                 )}
+                <button
+                  type="button"
+                  aria-label={`Excluir Tema ${String(i + 1).padStart(2, "0")}`}
+                  onClick={() => wizard.deleteRoteiro(i)}
+                  className="shrink-0 bg-transparent border-none text-[var(--text-3)] cursor-pointer text-sm leading-none flex hover:text-[var(--gold)]"
+                >
+                  <Icon name="trash" />
+                </button>
               </div>
             );
           })}

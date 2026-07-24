@@ -128,6 +128,7 @@ type WizardState = {
   savedTemas: boolean[];
   usedTemas: boolean[];
   failedTemas: boolean[];
+  deletedTemas: boolean[];
   selectedForVideo: number[];
   audioPaths: (string | null)[];
   audioUploading: boolean;
@@ -184,6 +185,7 @@ type WizardContextValue = WizardState & {
   uploadRecording: (idx: number, file: Blob, ext: string) => Promise<boolean>;
   skipAudio: (idx: number) => void;
   retryRecording: (idx: number) => void;
+  deleteRoteiro: (idx: number) => void;
   toggleSelectedForVideo: (idx: number) => void;
 
   setSelectedStyle: (s: StyleName) => void;
@@ -261,6 +263,7 @@ export function WizardProvider({
   const [savedTemas, setSavedTemas] = useState<boolean[]>([]);
   const [usedTemas, setUsedTemas] = useState<boolean[]>([]);
   const [failedTemas, setFailedTemas] = useState<boolean[]>([]);
+  const [deletedTemas, setDeletedTemas] = useState<boolean[]>([]);
   const [selectedForVideo, setSelectedForVideo] = useState<number[]>([]);
   const [audioPaths, setAudioPaths] = useState<(string | null)[]>([]);
   const [audioUploading, setAudioUploading] = useState(false);
@@ -458,6 +461,7 @@ export function WizardProvider({
     setSavedTemas(new Array(n).fill(false));
     setUsedTemas(new Array(n).fill(false));
     setFailedTemas(new Array(n).fill(false));
+    setDeletedTemas(new Array(n).fill(false));
     setSelectedForVideo([]);
     setAudioPaths(new Array(n).fill(null));
     setSceneSecondsByTema(new Array(n).fill(3));
@@ -606,10 +610,37 @@ export function WizardProvider({
     setSavedTemas((prev) => prev.map((v, i) => (i === idx ? false : v)));
     setUsedTemas((prev) => prev.map((v, i) => (i === idx ? false : v)));
     setFailedTemas((prev) => prev.map((v, i) => (i === idx ? false : v)));
+    // A "Regravar" button on the Download page can target a tema that was
+    // since deleted from the Gravação list — un-delete it so the flow lands
+    // somewhere visible instead of a hidden tema.
+    setDeletedTemas((prev) => prev.map((v, i) => (i === idx ? false : v)));
     setAudioPaths((prev) => prev.map((v, i) => (i === idx ? null : v)));
     setSelectedForVideo((prev) => prev.filter((i) => i !== idx));
     setScriptIndex(idx);
   }, []);
+
+  /**
+   * Marks a tema as deleted instead of splicing it out of the parallel arrays —
+   * a real removal would shift every later index and break the temaIndex a
+   * built Video already points at (e.g. the Download page's "Regravar" button).
+   * The tema just gets hidden everywhere and skipped during recording/build.
+   */
+  const deleteRoteiro = useCallback(
+    (idx: number) => {
+      const audioPath = audioPaths[idx];
+      if (audioPath) {
+        const supabase = createClient();
+        supabase.storage
+          .from("postime-audio")
+          .remove([audioPath])
+          .catch(() => {});
+      }
+      setDeletedTemas((prev) => prev.map((v, i) => (i === idx ? true : v)));
+      setSelectedForVideo((prev) => prev.filter((i) => i !== idx));
+      setScriptIndex((i) => (i === idx ? Math.min(i + 1, roteiros.length - 1) : i));
+    },
+    [audioPaths, roteiros.length],
+  );
 
   const toggleSelectedForVideo = useCallback((idx: number) => {
     setSelectedForVideo((prev) => (prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]));
@@ -652,57 +683,58 @@ export function WizardProvider({
       ownMatches.forEach((img, i) => imageByIndex.set(i, { url: img.url, photographer: "Sua foto" }));
 
       let dailyLimitHit = false;
-      let completedCount = 0;
       setBuildProgress({ completed: 0, total: indices.length });
-      const built: Omit<Video, "id">[] = await Promise.all(
-        indices.map(async (i): Promise<Omit<Video, "id">> => {
-          const image = imageByIndex.get(i);
-          const base: Omit<Video, "id"> = {
-            title: `Tema ${String(i + 1).padStart(2, "0")} · ${selectedStyle}`,
-            temaIndex: i,
-            style: selectedStyle,
-            imageUrl: image?.url,
-            imageCredit: image?.photographer,
-          };
+      // Rendered one at a time, not in parallel — concurrent ffmpeg jobs were
+      // contending for the same limited server resources and causing renders
+      // to fail; sequential requests are slower but reliable.
+      const built: Omit<Video, "id">[] = [];
+      for (let pos = 0; pos < indices.length; pos++) {
+        const i = indices[pos];
+        const image = imageByIndex.get(i);
+        const base: Omit<Video, "id"> = {
+          title: `Tema ${String(i + 1).padStart(2, "0")} · ${selectedStyle}`,
+          temaIndex: i,
+          style: selectedStyle,
+          imageUrl: image?.url,
+          imageCredit: image?.photographer,
+        };
+        const result = await (async (): Promise<Omit<Video, "id">> => {
+          const audioPath = audioPaths[i];
+          if (!image?.url || dailyLimitHit) return base;
           try {
-            const audioPath = audioPaths[i];
-            if (!image?.url || dailyLimitHit) return base;
-            try {
-              const renderRes = await fetch("/api/jobs/render", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  audioPath,
-                  imageUrl: image.url,
-                  text: roteiros[i]?.text ?? "",
-                  style: selectedStyle,
-                  mood: (musicMoodByTema[i] ?? "auto") === "auto" ? roteiros[i]?.mood : musicMoodByTema[i],
-                  sceneSeconds: sceneSecondsByTema[i] ?? 3,
-                  captionColor,
-                  captionSize,
-                  captionFont,
-                }),
-              });
-              const renderData = await renderRes.json();
-              if (!renderRes.ok) {
-                if (renderData?.error === "daily_video_limit_reached") dailyLimitHit = true;
-                return base;
-              }
-              return {
-                ...base,
-                videoUrl: renderData.videoUrl,
-                expiresAt: renderData.expiresAt,
-                durationSeconds: renderData.durationSeconds,
-              };
-            } catch {
+            const renderRes = await fetch("/api/jobs/render", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                audioPath,
+                imageUrl: image.url,
+                text: roteiros[i]?.text ?? "",
+                style: selectedStyle,
+                mood: (musicMoodByTema[i] ?? "auto") === "auto" ? roteiros[i]?.mood : musicMoodByTema[i],
+                sceneSeconds: sceneSecondsByTema[i] ?? 3,
+                captionColor,
+                captionSize,
+                captionFont,
+              }),
+            });
+            const renderData = await renderRes.json();
+            if (!renderRes.ok) {
+              if (renderData?.error === "daily_video_limit_reached") dailyLimitHit = true;
               return base;
             }
-          } finally {
-            completedCount += 1;
-            setBuildProgress({ completed: completedCount, total: indices.length });
+            return {
+              ...base,
+              videoUrl: renderData.videoUrl,
+              expiresAt: renderData.expiresAt,
+              durationSeconds: renderData.durationSeconds,
+            };
+          } catch {
+            return base;
           }
-        }),
-      );
+        })();
+        built.push(result);
+        setBuildProgress({ completed: pos + 1, total: indices.length });
+      }
       const label = sourceLabel() ?? "fonte selecionada";
       applyVideos(built, `${indices.length} vídeos gerados hoje · estilo ${selectedStyle} · fonte: ${label}`);
 
@@ -805,6 +837,7 @@ export function WizardProvider({
       savedTemas,
       usedTemas,
       failedTemas,
+      deletedTemas,
       selectedForVideo,
       audioPaths,
       audioUploading,
@@ -850,6 +883,7 @@ export function WizardProvider({
       uploadRecording,
       skipAudio,
       retryRecording,
+      deleteRoteiro,
       toggleSelectedForVideo,
       setSelectedStyle,
       setCaptionColor,
@@ -895,6 +929,7 @@ export function WizardProvider({
       savedTemas,
       usedTemas,
       failedTemas,
+      deletedTemas,
       selectedForVideo,
       audioPaths,
       audioUploading,
@@ -933,6 +968,7 @@ export function WizardProvider({
       uploadRecording,
       skipAudio,
       retryRecording,
+      deleteRoteiro,
       toggleSelectedForVideo,
       setSceneSecondsForTema,
       setMusicMoodForTema,
