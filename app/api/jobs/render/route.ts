@@ -63,6 +63,7 @@ export async function POST(request: Request) {
   const captionText = typeof body?.text === "string" ? body.text.slice(0, 2000) : undefined;
   const style = typeof body?.style === "string" ? body.style.slice(0, 40) : undefined;
   const mood = typeof body?.mood === "string" ? body.mood.slice(0, 40) : undefined;
+  const imageTheme = typeof body?.imageTheme === "string" ? body.imageTheme.slice(0, 60) : null;
   const sceneSeconds = ALLOWED_SCENE_SECONDS.includes(body?.sceneSeconds)
     ? (body.sceneSeconds as number)
     : DEFAULT_SCENE_SECONDS;
@@ -127,7 +128,7 @@ export async function POST(request: Request) {
       const extra = await Promise.all(
         chunks.slice(1).map(async (chunk) => {
           try {
-            const found = await searchPexelsImage(chunk);
+            const found = await searchPexelsImage(chunk, { themeQuery: imageTheme });
             return found?.url ?? null;
           } catch {
             return null;

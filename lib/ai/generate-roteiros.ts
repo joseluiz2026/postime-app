@@ -25,6 +25,13 @@ const roteiroItemSchema = z.object({
         "motivacional (superação, conquista, virada de jogo), calmo (bem-estar, reflexão, autocuidado), " +
         "corporativo (produtividade, carreira, negócios, dicas práticas neutras) ou animado (humor, curiosidades, entretenimento leve).",
     ),
+  imageQuery: z
+    .string()
+    .describe(
+      "3 a 6 palavras-chave EM INGLÊS, concretas e visuais (não traduza o texto do roteiro), " +
+        "descrevendo a cena/imagem que melhor representa este roteiro para uma busca em banco de imagens " +
+        "(ex: 'woman meditating sunrise beach', 'busy office team laptop meeting').",
+    ),
 });
 
 function resolveModel(provider: LlmProvider, apiKey: string, modelOverride?: string) {

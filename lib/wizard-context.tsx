@@ -13,6 +13,7 @@ import {
 } from "react";
 import type { LlmProvider } from "./ai/generate-roteiros";
 import type { MusicMood } from "./audio/moods";
+import { themeQueryFor, type ImageThemeId } from "./images/themes";
 import {
   type AccessPhase,
   type Duration,
@@ -40,7 +41,7 @@ export type CaptionFont = "poppins" | "anton" | "archivoblack";
 export type WatermarkPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export type OwnImage = { name: string; url: string; path: string };
-export type Roteiro = { meta: string; text: string; mood?: MusicMood };
+export type Roteiro = { meta: string; text: string; mood?: MusicMood; imageQuery?: string };
 // Core's video output is deliberately blind to distribution (see lib/distribution-context.tsx) —
 // it exposes an id so a channel-connect module can reference "which video", nothing about
 // publish state itself.
@@ -162,6 +163,7 @@ type WizardState = {
   selectedStyle: StyleName;
   sceneSecondsByTema: SceneSeconds[];
   musicMoodByTema: MusicMoodSelection[];
+  imageThemeByTema: ImageThemeId[];
   captionColor: CaptionColor;
   captionSize: CaptionSize;
   captionFont: CaptionFont;
@@ -225,6 +227,7 @@ type WizardContextValue = WizardState & {
   setCaptionShadow: (v: boolean) => void;
   setSceneSecondsForTema: (idx: number, s: SceneSeconds) => void;
   setMusicMoodForTema: (idx: number, m: MusicMoodSelection) => void;
+  setImageThemeForTema: (idx: number, id: ImageThemeId) => void;
   uploadWatermark: (file: File) => Promise<void>;
   removeWatermark: () => void;
   setWatermarkPosition: (pos: WatermarkPosition) => void;
@@ -310,6 +313,7 @@ export function WizardProvider({
   const [captionShadow, setCaptionShadow] = useState(false);
   const [sceneSecondsByTema, setSceneSecondsByTema] = useState<SceneSeconds[]>([]);
   const [musicMoodByTema, setMusicMoodByTema] = useState<MusicMoodSelection[]>([]);
+  const [imageThemeByTema, setImageThemeByTema] = useState<ImageThemeId[]>([]);
   const [watermark, setWatermark] = useState<{ url: string; path: string } | null>(null);
   const [watermarkPosition, setWatermarkPosition] = useState<WatermarkPosition>("bottom-right");
   const [watermarkUploading, setWatermarkUploading] = useState(false);
@@ -321,6 +325,10 @@ export function WizardProvider({
 
   const setMusicMoodForTema = useCallback((idx: number, m: MusicMoodSelection) => {
     setMusicMoodByTema((prev) => prev.map((v, i) => (i === idx ? m : v)));
+  }, []);
+
+  const setImageThemeForTema = useCallback((idx: number, id: ImageThemeId) => {
+    setImageThemeByTema((prev) => prev.map((v, i) => (i === idx ? id : v)));
   }, []);
 
   const [videos, setVideos] = useState<Video[]>([]);
@@ -554,6 +562,7 @@ export function WizardProvider({
     setAudioPaths(new Array(n).fill(null));
     setSceneSecondsByTema(new Array(n).fill(3));
     setMusicMoodByTema(new Array(n).fill("auto"));
+    setImageThemeByTema(new Array(n).fill("auto"));
   }, []);
 
   const applyVideos = useCallback(
@@ -782,11 +791,12 @@ export function WizardProvider({
 
       let fetchedImages: ({ url: string; photographer: string } | null)[] = [];
       if (unmatchedIndices.length > 0) {
-        const queries = unmatchedIndices.map((i) => roteiros[i]?.text ?? "");
+        const queries = unmatchedIndices.map((i) => roteiros[i]?.imageQuery || roteiros[i]?.text || "");
+        const themes = unmatchedIndices.map((i) => themeQueryFor(imageThemeByTema[i]));
         const res = await fetch("/api/scenes/images", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ queries }),
+          body: JSON.stringify({ queries, themes }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -833,6 +843,7 @@ export function WizardProvider({
                 style: selectedStyle,
                 mood: (musicMoodByTema[i] ?? "auto") === "auto" ? roteiros[i]?.mood : musicMoodByTema[i],
                 sceneSeconds: sceneSecondsByTema[i] ?? 3,
+                imageTheme: themeQueryFor(imageThemeByTema[i]),
                 captionColor,
                 captionSize,
                 captionFont,
@@ -891,6 +902,7 @@ export function WizardProvider({
     selectedStyle,
     sceneSecondsByTema,
     musicMoodByTema,
+    imageThemeByTema,
     captionColor,
     captionSize,
     captionFont,
@@ -973,6 +985,7 @@ export function WizardProvider({
       selectedStyle,
       sceneSecondsByTema,
       musicMoodByTema,
+      imageThemeByTema,
       captionColor,
       captionSize,
       captionFont,
@@ -1026,6 +1039,7 @@ export function WizardProvider({
       setCaptionShadow,
       setSceneSecondsForTema,
       setMusicMoodForTema,
+      setImageThemeForTema,
       uploadWatermark,
       removeWatermark,
       setWatermarkPosition,
@@ -1075,6 +1089,7 @@ export function WizardProvider({
       selectedStyle,
       sceneSecondsByTema,
       musicMoodByTema,
+      imageThemeByTema,
       captionColor,
       captionSize,
       captionFont,
@@ -1116,6 +1131,7 @@ export function WizardProvider({
       toggleSelectedForVideo,
       setSceneSecondsForTema,
       setMusicMoodForTema,
+      setImageThemeForTema,
       uploadWatermark,
       removeWatermark,
       setWatermarkPosition,

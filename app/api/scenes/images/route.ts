@@ -17,9 +17,14 @@ export async function POST(request: Request) {
   if (!queries || queries.length === 0 || queries.length > 20) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
+  const themes: (string | null)[] = Array.isArray(body?.themes)
+    ? body.themes.map((t: unknown) => (typeof t === "string" ? t : null))
+    : queries.map(() => null);
 
   try {
-    const images = await Promise.all(queries.map((q: string) => searchPexelsImage(q)));
+    const images = await Promise.all(
+      queries.map((q: string, i: number) => searchPexelsImage(q, { themeQuery: themes[i] })),
+    );
     return NextResponse.json({ images });
   } catch (err) {
     console.error("[/api/scenes/images]", err instanceof Error ? err.message : err);

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/lib/icons";
+import { IMAGE_THEMES } from "@/lib/images/themes";
 import {
   useWizard,
   type CaptionColor,
@@ -31,6 +32,8 @@ const MUSIC_MOOD_OPTIONS: { id: MusicMoodSelection; label: string }[] = [
   { id: "corporativo", label: "Corporativo" },
   { id: "animado", label: "Animado" },
 ];
+
+const IMAGE_THEME_OPTIONS = IMAGE_THEMES.map((t) => ({ id: t.id, label: t.label }));
 
 const CAPTION_COLOR_OPTIONS: { id: CaptionColor; label: string; swatch: string }[] = [
   { id: "auto", label: "Automático", swatch: "" },
@@ -294,7 +297,7 @@ export default function EstiloPage() {
       {n > 0 && (
         <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
           <span className="block text-xs font-medium text-[var(--text-2)] mb-3">
-            Cena e música por vídeo
+            Cena, música e imagens por vídeo
             <HelpTip
               label="Como isso afeta cada vídeo"
               text={
@@ -302,7 +305,9 @@ export default function EstiloPage() {
                   <strong>Duração de cena:</strong> cada cena é uma foto — o app soma a duração da narração (ou da
                   legenda, se você pulou a gravação) com 6 segundos de folga e divide pelo tempo escolhido pra saber
                   quantas fotos entram. <strong>Música:</strong> no automático, o clima já vem definido pela IA pra
-                  esse roteiro; escolhendo um clima aqui, só esse vídeo usa esse clima em vez do automático.
+                  esse roteiro; escolhendo um clima aqui, só esse vídeo usa esse clima em vez do automático.{" "}
+                  <strong>Tema visual:</strong> no automático, as fotos seguem o assunto do roteiro; escolhendo um
+                  tema, as buscas de foto ficam enviesadas pra esse estilo (natureza, cidades, etc).
                 </>
               }
             />
@@ -337,6 +342,20 @@ export default function EstiloPage() {
                       {m.label}
                     </Pill>
                   ))}
+                </div>
+                <div className="flex items-center gap-2.5 flex-wrap w-full">
+                  <span className="text-[11px] text-[var(--text-3)] shrink-0">Tema visual:</span>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {IMAGE_THEME_OPTIONS.map((t) => (
+                      <Pill
+                        key={t.id}
+                        selected={(wizard.imageThemeByTema[i] ?? "auto") === t.id}
+                        onClick={() => wizard.setImageThemeForTema(i, t.id)}
+                      >
+                        {t.label}
+                      </Pill>
+                    ))}
+                  </div>
                 </div>
               </div>
             ))}
