@@ -27,17 +27,17 @@ const roteiroItemSchema = z.object({
     ),
 });
 
-function resolveModel(provider: LlmProvider, apiKey: string) {
+function resolveModel(provider: LlmProvider, apiKey: string, modelOverride?: string) {
   switch (provider) {
     case "google":
-      return createGoogleGenerativeAI({ apiKey })("gemini-3.5-flash");
+      return createGoogleGenerativeAI({ apiKey })(modelOverride || "gemini-3.5-flash");
     case "openai":
       return createOpenAI({ apiKey })("gpt-4.1-mini");
     case "anthropic":
       return createAnthropic({ apiKey })("claude-haiku-4-5");
     case "groq":
       // Structured output (json_schema) is currently only supported by the gpt-oss models on Groq.
-      return createGroq({ apiKey })("openai/gpt-oss-120b");
+      return createGroq({ apiKey })(modelOverride || "openai/gpt-oss-120b");
   }
 }
 
@@ -53,8 +53,10 @@ export async function generateRoteiros(opts: {
   duration: "15s" | "30s";
   sourceHint: string;
   sourceIsRealContent: boolean;
+  /** Only meaningful for "groq"/"google" — overrides the free-tier pool-key model (see lib/ai/config.ts). Ignored for BYOK providers. */
+  modelOverride?: string;
 }) {
-  const model = resolveModel(opts.provider, opts.apiKey);
+  const model = resolveModel(opts.provider, opts.apiKey, opts.modelOverride);
 
   const prompt = [
     "Você é um roteirista especializado em vídeos curtos para TikTok em português do Brasil.",

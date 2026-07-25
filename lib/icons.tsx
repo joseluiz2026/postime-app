@@ -51,6 +51,11 @@ const ICON_PATHS: Record<string, string> = {
   square: '<rect x="4" y="4" width="16" height="16" rx="2"/>',
   typography: '<path d="M4 20h4"/><path d="M14 20h6"/><path d="M6.9 15h6.2"/><path d="M9.5 5h2l4 15h-2l-1.1-4h-6.8l-1.1 4h-2z"/>',
   "zoom-in": '<circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6"/><path d="M7 10h6"/><path d="M10 7v6"/>',
+  users:
+    '<circle cx="9" cy="7" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="8.5" r="2.5"/><path d="M15.5 13.2a5 5 0 0 1 6 5.3"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6l9-6"/>',
+  "chart-bar": '<path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/><path d="M3 20h18"/>',
+  shield: '<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9c-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2l4-4"/>',
 };
 
 export type IconName = keyof typeof ICON_PATHS;

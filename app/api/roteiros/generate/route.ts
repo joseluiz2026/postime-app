@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateRoteiros, type LlmProvider } from "@/lib/ai/generate-roteiros";
 import { allowedDurationsFor, getAccessPhase, type Duration } from "@/lib/plan";
+import { getFreeTierModels } from "@/lib/ai/config";
 
 // Best-effort diagnostic counter — never lets a logging hiccup affect the actual
 // fallback flow. Vercel's own log retention is too short to answer "how often does
@@ -87,10 +88,16 @@ export async function POST(request: Request) {
   // the Groq switch, rather than surfacing a rate-limit error to the user.
   const groqKey = process.env.GROQ_API_KEY;
   const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const freeModels = await getFreeTierModels();
 
   if (groqKey) {
     try {
-      const roteiros = await generateRoteiros({ provider: "groq", apiKey: groqKey, ...genArgs });
+      const roteiros = await generateRoteiros({
+        provider: "groq",
+        apiKey: groqKey,
+        modelOverride: freeModels.primary,
+        ...genArgs,
+      });
       return NextResponse.json({ roteiros, mode: accessPhase });
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
@@ -101,7 +108,12 @@ export async function POST(request: Request) {
 
   if (googleKey) {
     try {
-      const roteiros = await generateRoteiros({ provider: "google", apiKey: googleKey, ...genArgs });
+      const roteiros = await generateRoteiros({
+        provider: "google",
+        apiKey: googleKey,
+        modelOverride: freeModels.fallback,
+        ...genArgs,
+      });
       return NextResponse.json({ roteiros, mode: accessPhase });
     } catch (err) {
       const message = err instanceof Error ? err.message : "";

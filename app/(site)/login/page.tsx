@@ -13,6 +13,26 @@ export default function LoginPage() {
     const email = String(formData.get("email") || "").trim();
     const password = String(formData.get("password") || "");
 
+    // Checked first (server-side only) so the super-admin account can log in through
+    // this same form — see app/api/admin/login. Any non-admin credential falls
+    // through unchanged to the normal Supabase sign-in below.
+    const adminRes = await fetch("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: email, password }),
+    });
+    if (adminRes.status === 429) {
+      return { error: "Muitas tentativas. Aguarde alguns minutos e tente novamente." };
+    }
+    if (adminRes.ok) {
+      const { admin } = await adminRes.json();
+      if (admin) {
+        router.push("/admin");
+        router.refresh();
+        return;
+      }
+    }
+
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -51,7 +71,7 @@ export default function LoginPage() {
         </>
       }
     >
-      <AuthField label="E-mail" name="email" type="email" placeholder="voce@email.com" required />
+      <AuthField label="E-mail" name="email" type="text" placeholder="voce@email.com" required />
       <AuthField label="Senha" name="password" type="password" placeholder="Sua senha" required />
     </AuthCard>
   );

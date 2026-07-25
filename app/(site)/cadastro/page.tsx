@@ -27,6 +27,11 @@ export default function CadastroPage() {
     }
 
     if (data.session) {
+      fetch("/api/auth/welcome", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      }).catch(() => {});
       router.push("/app/fonte");
       router.refresh();
       return;

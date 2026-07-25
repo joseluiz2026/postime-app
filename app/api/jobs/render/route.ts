@@ -8,6 +8,7 @@ import { searchPexelsImage } from "@/lib/images/pexels";
 import { pickMusicTrack } from "@/lib/audio/music-picker";
 import { createClient } from "@/lib/supabase/server";
 import { dailyVideoLimitFor, getAccessPhase } from "@/lib/plan";
+import { sendLimitReachedEmailOnce } from "@/lib/admin/message-templates";
 
 const ALLOWED_SCENE_SECONDS = [1, 2, 3, 4, 5] as const;
 const DEFAULT_SCENE_SECONDS = 3;
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
       .in("status", ["processando", "pronto"])
       .gte("created_at", startOfDay);
     if (!countErr && (count ?? 0) >= dailyLimit) {
+      if (user.email) void sendLimitReachedEmailOnce(user.id, user.email);
       return NextResponse.json({ error: "daily_video_limit_reached", limit: dailyLimit }, { status: 429 });
     }
   }
