@@ -24,12 +24,24 @@ export default function LoginPage() {
     router.refresh();
   }
 
+  async function handleGoogle(): Promise<AuthResult> {
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) {
+      return { error: translateAuthError(error.message) };
+    }
+  }
+
   return (
     <AuthCard
       title="Entrar no POSTime"
       subtitle="Acesse sua conta para continuar gerando conteúdo."
       submitLabel="Entrar"
       onSubmit={handleSubmit}
+      onGoogle={handleGoogle}
       footer={
         <>
           Ainda não tem conta?{" "}

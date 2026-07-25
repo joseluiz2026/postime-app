@@ -35,12 +35,24 @@ export default function CadastroPage() {
     return { info: "Quase lá! Confirme seu cadastro pelo link que enviamos para o seu e-mail." };
   }
 
+  async function handleGoogle(): Promise<AuthResult> {
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) {
+      return { error: translateAuthError(error.message) };
+    }
+  }
+
   return (
     <AuthCard
       title="Crie sua conta grátis"
       subtitle={`${TRIAL_DAYS} dias grátis, sem cartão de crédito. Nome, e-mail e senha — só isso.`}
       submitLabel="Criar minha conta"
       onSubmit={handleSubmit}
+      onGoogle={handleGoogle}
       footer={
         <>
           Já tem conta?{" "}
