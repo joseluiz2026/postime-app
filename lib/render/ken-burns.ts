@@ -94,6 +94,20 @@ const CAPTION_FONT_WIDTH_RATIOS: Record<string, { normal: number; uppercase: num
 // fades out — instead of cutting off right when the talking stops.
 const MUSIC_OUTRO_SECONDS = 3;
 
+// Title/subtitle are a separate, always-on-screen overlay (not synced to
+// narration timing like captions) — a headline card near the top of the frame.
+// Fixed base sizes distinct from caption sizing since they read at a different
+// visual weight (title bigger/bolder, subtitle smaller, supporting text).
+const TITLE_BASE_FONTSIZE = 64;
+const SUBTITLE_BASE_FONTSIZE = 42;
+const TITLE_TOP_MARGIN = 90;
+const TITLE_SUBTITLE_GAP = 90;
+const LETTERBOX_HEIGHT = 150;
+const OVERLAY_SIDE_MARGIN = 60;
+// How long a single título/subtítulo cue stays on screen once its start time
+// hits, unless the next cue in the same list starts sooner (then it's cut short).
+const OVERLAY_CUE_DISPLAY_SECONDS = 4;
+
 const STYLE_CONFIGS: Record<string, StyleRenderConfig> = {
   Minimalista: {
     mode: "phrase",
@@ -250,10 +264,18 @@ async function buildCaptionChain(opts: {
   captionFont?: string;
   captionShadow?: boolean;
   captionBackground?: string;
+  captionPositionY?: number;
 }): Promise<{ lines: string[]; outLabel: string }> {
   const cfg = STYLE_CONFIGS[opts.style] ?? STYLE_CONFIGS[DEFAULT_STYLE];
   const fontsize = Math.round(cfg.fontsize * (CAPTION_SIZE_MULTIPLIERS[opts.captionSize ?? "medium"] ?? 1));
   const fontcolor = (opts.captionColor && CAPTION_COLOR_MAP[opts.captionColor]) || cfg.fontcolor;
+  // A user-picked slider position (0 = top, 100 = bottom of frame) overrides the
+  // style's own fixed y — anchored by the text's vertical center, not its top edge,
+  // so the slider behaves the same regardless of font size or line count.
+  const yBase =
+    typeof opts.captionPositionY === "number"
+      ? `(h*${(opts.captionPositionY / 100).toFixed(4)}-text_h/2)`
+      : cfg.y;
   // "none" forces the box off regardless of the style's own default; a color
   // forces it on with that color; "auto"/undefined keeps the style's own box
   // and boxcolor exactly as before (no regression for existing behavior).
@@ -266,8 +288,8 @@ async function buildCaptionChain(opts: {
   let cur = opts.inLabel;
 
   if (cfg.letterbox) {
-    lines.push(`[${cur}]drawbox=x=0:y=0:w=1080:h=150:color=black:t=fill[lb0]`);
-    lines.push(`[lb0]drawbox=x=0:y=1770:w=1080:h=150:color=black:t=fill[lb1]`);
+    lines.push(`[${cur}]drawbox=x=0:y=0:w=1080:h=${LETTERBOX_HEIGHT}:color=black:t=fill[lb0]`);
+    lines.push(`[lb0]drawbox=x=0:y=${1920 - LETTERBOX_HEIGHT}:w=1080:h=${LETTERBOX_HEIGHT}:color=black:t=fill[lb1]`);
     cur = "lb1";
   }
 
@@ -301,8 +323,8 @@ async function buildCaptionChain(opts: {
       // re-centers each line within the block so every line reads centered.
       `text_align=center`,
       cfg.rise > 0
-        ? `y='${cfg.y}+(1-min((t-${start})/0.12,1))*${cfg.rise}'`
-        : `y='${cfg.y}'`,
+        ? `y='${yBase}+(1-min((t-${start})/0.12,1))*${cfg.rise}'`
+        : `y='${yBase}'`,
     ];
     if (hasBox) {
       // A dark translucent panel is usually the default — if the user picked
@@ -328,6 +350,86 @@ async function buildCaptionChain(opts: {
     );
 
     const out = `cap${i}`;
+    lines.push(`[${cur}]drawtext=${parts.join(":")}[${out}]`);
+    cur = out;
+  }
+
+  return { lines, outLabel: cur };
+}
+
+/**
+ * A list of timed text overlay cues (title or subtitle) — unlike captions,
+ * cues aren't synced to narration and have no background panel, just
+ * positioned text with a shared alignment/font/size/color/shadow. Each cue is
+ * visible for `OVERLAY_CUE_DISPLAY_SECONDS` starting at its own `start` time,
+ * cut short if the next cue starts before that window ends.
+ */
+async function buildOverlayCuesChain(opts: {
+  cues: { text: string; start: number }[];
+  duration: number;
+  workDir: string;
+  inLabel: string;
+  idPrefix: string;
+  y: number;
+  baseFontsize: number;
+  align?: string;
+  color?: string;
+  size?: string;
+  font?: string;
+  shadow?: boolean;
+}): Promise<{ lines: string[]; outLabel: string }> {
+  const fontsize = Math.round(opts.baseFontsize * (CAPTION_SIZE_MULTIPLIERS[opts.size ?? "medium"] ?? 1));
+  const fontcolor = (opts.color && CAPTION_COLOR_MAP[opts.color]) || "white";
+  const widthRatios = CAPTION_FONT_WIDTH_RATIOS[opts.font ?? "poppins"] ?? CAPTION_FONT_WIDTH_RATIOS.poppins;
+  const maxCharsPerLine = Math.max(6, Math.floor(CAPTION_MAX_WIDTH_PX / (fontsize * widthRatios.normal)));
+  const fontEsc = escapeFilterPath(getCaptionFontPath(opts.font));
+
+  const align = opts.align === "left" || opts.align === "right" ? opts.align : "center";
+  const x =
+    align === "left"
+      ? `${OVERLAY_SIDE_MARGIN}`
+      : align === "right"
+        ? `w-text_w-${OVERLAY_SIDE_MARGIN}`
+        : `(w-text_w)/2`;
+
+  const sorted = [...opts.cues].sort((a, b) => a.start - b.start);
+  const lines: string[] = [];
+  let cur = opts.inLabel;
+
+  for (let i = 0; i < sorted.length; i++) {
+    const cue = sorted[i];
+    const start = Math.min(cue.start, opts.duration);
+    const nextStart = i + 1 < sorted.length ? sorted[i + 1].start : opts.duration;
+    const end = Math.min(start + OVERLAY_CUE_DISPLAY_SECONDS, nextStart, opts.duration);
+    if (end - start < 0.02) continue;
+
+    const displayText = wrapCaptionText(cue.text, maxCharsPerLine);
+    const txtPath = path.join(opts.workDir, `${opts.idPrefix}_${i}.txt`);
+    await writeFile(txtPath, displayText, "utf8");
+    const txtEsc = escapeFilterPath(txtPath);
+    const fade = Math.min(0.3, (end - start) / 3).toFixed(3);
+    const startStr = start.toFixed(3);
+    const endStr = end.toFixed(3);
+
+    const parts = [
+      `fontfile='${fontEsc}'`,
+      `textfile='${txtEsc}'`,
+      `fontsize=${fontsize}`,
+      `fontcolor=${fontcolor}`,
+      `x=${x}`,
+      `text_align=${align}`,
+      `y=${opts.y}`,
+    ];
+    if (opts.shadow) {
+      const shadowOffset = Math.max(2, Math.round(fontsize * 0.035));
+      parts.push(`shadowcolor=black@0.65`, `shadowx=${shadowOffset}`, `shadowy=${shadowOffset}`);
+    }
+    parts.push(
+      `alpha='if(lt(t,${startStr}+${fade}),(t-${startStr})/${fade},if(gt(t,${endStr}-${fade}),(${endStr}-t)/${fade},1))'`,
+      `enable='between(t,${startStr},${endStr})'`,
+    );
+
+    const out = `${opts.idPrefix}${i}`;
     lines.push(`[${cur}]drawtext=${parts.join(":")}[${out}]`);
     cur = out;
   }
@@ -364,6 +466,19 @@ export async function renderKenBurnsVideo(opts: {
   captionFont?: string;
   captionShadow?: boolean;
   captionBackground?: string;
+  captionPositionY?: number;
+  titleCues?: { text: string; start: number }[];
+  titleAlign?: string;
+  titleColor?: string;
+  titleSize?: string;
+  titleFont?: string;
+  titleShadow?: boolean;
+  subtitleCues?: { text: string; start: number }[];
+  subtitleAlign?: string;
+  subtitleColor?: string;
+  subtitleSize?: string;
+  subtitleFont?: string;
+  subtitleShadow?: boolean;
   durationSeconds?: number;
   musicPath?: string;
   watermarkPath?: string;
@@ -404,9 +519,50 @@ export async function renderKenBurnsVideo(opts: {
       captionFont: opts.captionFont,
       captionShadow: opts.captionShadow,
       captionBackground: opts.captionBackground,
+      captionPositionY: opts.captionPositionY,
     });
     filterLines.push(...chain.lines);
     outLabel = chain.outLabel;
+  }
+
+  // Title/subtitle sit near the top and are unrelated to caption timing/style,
+  // so they're built independently and just chained onto whatever came before.
+  const overlayTopY = cfg.letterbox ? LETTERBOX_HEIGHT + 30 : TITLE_TOP_MARGIN;
+  if (opts.titleCues && opts.titleCues.length > 0) {
+    const titleChain = await buildOverlayCuesChain({
+      cues: opts.titleCues,
+      duration,
+      workDir,
+      inLabel: outLabel,
+      idPrefix: "title",
+      y: overlayTopY,
+      baseFontsize: TITLE_BASE_FONTSIZE,
+      align: opts.titleAlign,
+      color: opts.titleColor,
+      size: opts.titleSize,
+      font: opts.titleFont,
+      shadow: opts.titleShadow,
+    });
+    filterLines.push(...titleChain.lines);
+    outLabel = titleChain.outLabel;
+  }
+  if (opts.subtitleCues && opts.subtitleCues.length > 0) {
+    const subtitleChain = await buildOverlayCuesChain({
+      cues: opts.subtitleCues,
+      duration,
+      workDir,
+      inLabel: outLabel,
+      idPrefix: "subtitle",
+      y: overlayTopY + TITLE_SUBTITLE_GAP,
+      baseFontsize: SUBTITLE_BASE_FONTSIZE,
+      align: opts.subtitleAlign,
+      color: opts.subtitleColor,
+      size: opts.subtitleSize,
+      font: opts.subtitleFont,
+      shadow: opts.subtitleShadow,
+    });
+    filterLines.push(...subtitleChain.lines);
+    outLabel = subtitleChain.outLabel;
   }
 
   const args: string[] = ["-y"];

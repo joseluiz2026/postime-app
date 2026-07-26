@@ -107,7 +107,14 @@ export default function GravacaoPage() {
     if (phase === "idle") {
       setMicError(null);
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // autoGainControl defaults to on in Chrome, which spends the first
+        // ~1-2s of every new track ramping gain up/down before it settles —
+        // audible as "starts loud, dips, creeps back up" in the recording.
+        // Off gives a flat level from the first frame; echo cancellation stays
+        // on since there's no call/loopback scenario to fight with narration.
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { autoGainControl: false, echoCancellation: true, noiseSuppression: true },
+        });
         streamRef.current = stream;
         const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
         const recorder = new MediaRecorder(stream, { mimeType });

@@ -18,6 +18,25 @@ const ALLOWED_CAPTION_BACKGROUNDS = ["auto", "none", "white", "black", "yellow",
 const ALLOWED_CAPTION_SIZES = ["small", "medium", "large"] as const;
 const ALLOWED_CAPTION_FONTS = ["poppins", "anton", "archivoblack"] as const;
 const ALLOWED_WATERMARK_POSITIONS = ["top-left", "top-right", "bottom-left", "bottom-right"] as const;
+const ALLOWED_TEXT_ALIGNS = ["left", "center", "right"] as const;
+const MAX_OVERLAY_CUES = 12;
+
+/** Sanitizes a raw título/subtítulo cue array from the client: keeps only
+ * well-formed {text, start} entries, trims/caps text length, clamps start to
+ * a sane non-negative number, and bounds the list length. */
+function parseOverlayCues(raw: unknown): { text: string; start: number }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((v) => {
+      if (!v || typeof v !== "object") return null;
+      const text = typeof (v as Record<string, unknown>).text === "string" ? (v as { text: string }).text.trim().slice(0, 200) : "";
+      const startRaw = (v as Record<string, unknown>).start;
+      const start = typeof startRaw === "number" && Number.isFinite(startRaw) ? Math.max(0, startRaw) : 0;
+      return text ? { text, start } : null;
+    })
+    .filter((v): v is { text: string; start: number } => v !== null)
+    .slice(0, MAX_OVERLAY_CUES);
+}
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -72,6 +91,22 @@ export async function POST(request: Request) {
   const captionBackground = ALLOWED_CAPTION_BACKGROUNDS.includes(body?.captionBackground)
     ? (body.captionBackground as string)
     : "auto";
+  const captionPositionY =
+    typeof body?.captionPositionY === "number" && Number.isFinite(body.captionPositionY)
+      ? Math.min(100, Math.max(0, body.captionPositionY))
+      : undefined;
+  const titleCues = parseOverlayCues(body?.titleCues);
+  const titleAlign = ALLOWED_TEXT_ALIGNS.includes(body?.titleAlign) ? (body.titleAlign as string) : "center";
+  const titleColor = ALLOWED_CAPTION_COLORS.includes(body?.titleColor) ? (body.titleColor as string) : "auto";
+  const titleSize = ALLOWED_CAPTION_SIZES.includes(body?.titleSize) ? (body.titleSize as string) : "medium";
+  const titleFont = ALLOWED_CAPTION_FONTS.includes(body?.titleFont) ? (body.titleFont as string) : "poppins";
+  const titleShadow = body?.titleShadow === true;
+  const subtitleCues = parseOverlayCues(body?.subtitleCues);
+  const subtitleAlign = ALLOWED_TEXT_ALIGNS.includes(body?.subtitleAlign) ? (body.subtitleAlign as string) : "center";
+  const subtitleColor = ALLOWED_CAPTION_COLORS.includes(body?.subtitleColor) ? (body.subtitleColor as string) : "auto";
+  const subtitleSize = ALLOWED_CAPTION_SIZES.includes(body?.subtitleSize) ? (body.subtitleSize as string) : "medium";
+  const subtitleFont = ALLOWED_CAPTION_FONTS.includes(body?.subtitleFont) ? (body.subtitleFont as string) : "poppins";
+  const subtitleShadow = body?.subtitleShadow === true;
   const watermarkPath = typeof body?.watermarkPath === "string" ? body.watermarkPath : "";
   const watermarkPosition = ALLOWED_WATERMARK_POSITIONS.includes(body?.watermarkPosition)
     ? (body.watermarkPosition as string)
@@ -188,6 +223,19 @@ export async function POST(request: Request) {
       captionSize,
       captionShadow,
       captionBackground,
+      captionPositionY,
+      titleCues,
+      titleAlign,
+      titleColor: titleColor === "auto" ? undefined : titleColor,
+      titleSize,
+      titleFont,
+      titleShadow,
+      subtitleCues,
+      subtitleAlign,
+      subtitleColor: subtitleColor === "auto" ? undefined : subtitleColor,
+      subtitleSize,
+      subtitleFont,
+      subtitleShadow,
       watermarkPath: watermarkFile,
       watermarkPosition: watermarkFile ? (watermarkPosition as "top-left" | "top-right" | "bottom-left" | "bottom-right") : undefined,
       captionFont,

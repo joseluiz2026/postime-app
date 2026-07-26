@@ -58,6 +58,11 @@ export type CaptionBackground = "auto" | "none" | "white" | "black" | "yellow" |
 export type CaptionSize = "small" | "medium" | "large";
 export type CaptionFont = "poppins" | "anton" | "archivoblack";
 export type WatermarkPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+export type TextAlign = "left" | "center" | "right";
+/** One título/subtítulo occurrence: shows `text` starting at `start` seconds
+ * into the video for a few seconds. A tema can have zero, one, or several —
+ * entirely optional, unlike the always-on-if-set single overlay this replaced. */
+export type TextOverlayCue = { id: string; text: string; start: number };
 
 export type OwnImage = { name: string; url: string; path: string };
 export type Roteiro = { meta: string; text: string; mood?: MusicMood; imageQuery?: string };
@@ -171,6 +176,12 @@ type WizardState = {
   // One entry per image segment of that tema's video; a URL means "use this own
   // photo in this slot", null means "fill this slot automatically with stock".
   imageAssignmentsByTema: (string | null)[][];
+  // Optional, timed headline/support text cues per tema — an empty array means
+  // "no overlays for this video". Content and timing are per-tema (each video's
+  // topic/pacing differs); the look (align/font/size/color/shadow) is one
+  // shared style per batch, below.
+  titleCuesByTema: TextOverlayCue[][];
+  subtitleCuesByTema: TextOverlayCue[][];
 
   // estilo
   selectedStyle: StyleName;
@@ -182,6 +193,19 @@ type WizardState = {
   captionFont: CaptionFont;
   captionShadow: boolean;
   captionBackground: CaptionBackground;
+  // null = "automático" — each style keeps its own fixed vertical position;
+  // a number (0-100, top-to-bottom % of frame height) overrides it for every video.
+  captionPositionY: number | null;
+  titleAlign: TextAlign;
+  titleColor: CaptionColor;
+  titleSize: CaptionSize;
+  titleFont: CaptionFont;
+  titleShadow: boolean;
+  subtitleAlign: TextAlign;
+  subtitleColor: CaptionColor;
+  subtitleSize: CaptionSize;
+  subtitleFont: CaptionFont;
+  subtitleShadow: boolean;
   watermark: { url: string; path: string } | null;
   watermarkPosition: WatermarkPosition;
   watermarkUploading: boolean;
@@ -213,6 +237,12 @@ type WizardContextValue = WizardState & {
   neededSegmentsForTema: (idx: number) => number;
   segmentTextsForTema: (idx: number) => string[];
   setImageAssignment: (temaIdx: number, segmentIdx: number, url: string | null) => void;
+  addTitleCue: (temaIdx: number) => void;
+  updateTitleCue: (temaIdx: number, cueId: string, patch: Partial<Pick<TextOverlayCue, "text" | "start">>) => void;
+  removeTitleCue: (temaIdx: number, cueId: string) => void;
+  addSubtitleCue: (temaIdx: number) => void;
+  updateSubtitleCue: (temaIdx: number, cueId: string, patch: Partial<Pick<TextOverlayCue, "text" | "start">>) => void;
+  removeSubtitleCue: (temaIdx: number, cueId: string) => void;
 
   setDuration: (d: Duration) => void;
   setQty: (v: number) => void;
@@ -242,6 +272,17 @@ type WizardContextValue = WizardState & {
   setCaptionFont: (f: CaptionFont) => void;
   setCaptionShadow: (v: boolean) => void;
   setCaptionBackground: (b: CaptionBackground) => void;
+  setCaptionPositionY: (v: number | null) => void;
+  setTitleAlign: (a: TextAlign) => void;
+  setTitleColor: (c: CaptionColor) => void;
+  setTitleSize: (s: CaptionSize) => void;
+  setTitleFont: (f: CaptionFont) => void;
+  setTitleShadow: (v: boolean) => void;
+  setSubtitleAlign: (a: TextAlign) => void;
+  setSubtitleColor: (c: CaptionColor) => void;
+  setSubtitleSize: (s: CaptionSize) => void;
+  setSubtitleFont: (f: CaptionFont) => void;
+  setSubtitleShadow: (v: boolean) => void;
   setSceneSecondsForTema: (idx: number, s: SceneSeconds) => void;
   setMusicMoodForTema: (idx: number, m: MusicMoodSelection) => void;
   setImageThemeForTema: (idx: number, id: ImageThemeId) => void;
@@ -324,6 +365,8 @@ export function WizardProvider({
   const [audioUploading, setAudioUploading] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [imageAssignmentsByTema, setImageAssignmentsByTema] = useState<(string | null)[][]>([]);
+  const [titleCuesByTema, setTitleCuesByTema] = useState<TextOverlayCue[][]>([]);
+  const [subtitleCuesByTema, setSubtitleCuesByTema] = useState<TextOverlayCue[][]>([]);
 
   const [selectedStyle, setSelectedStyle] = useState<StyleName>("Minimalista");
   const [captionColor, setCaptionColor] = useState<CaptionColor>("auto");
@@ -331,6 +374,17 @@ export function WizardProvider({
   const [captionFont, setCaptionFont] = useState<CaptionFont>("poppins");
   const [captionShadow, setCaptionShadow] = useState(false);
   const [captionBackground, setCaptionBackground] = useState<CaptionBackground>("auto");
+  const [captionPositionY, setCaptionPositionY] = useState<number | null>(null);
+  const [titleAlign, setTitleAlign] = useState<TextAlign>("center");
+  const [titleColor, setTitleColor] = useState<CaptionColor>("auto");
+  const [titleSize, setTitleSize] = useState<CaptionSize>("medium");
+  const [titleFont, setTitleFont] = useState<CaptionFont>("poppins");
+  const [titleShadow, setTitleShadow] = useState(false);
+  const [subtitleAlign, setSubtitleAlign] = useState<TextAlign>("center");
+  const [subtitleColor, setSubtitleColor] = useState<CaptionColor>("auto");
+  const [subtitleSize, setSubtitleSize] = useState<CaptionSize>("medium");
+  const [subtitleFont, setSubtitleFont] = useState<CaptionFont>("poppins");
+  const [subtitleShadow, setSubtitleShadow] = useState(false);
   const [sceneSecondsByTema, setSceneSecondsByTema] = useState<SceneSeconds[]>([]);
   const [musicMoodByTema, setMusicMoodByTema] = useState<MusicMoodSelection[]>([]);
   const [imageThemeByTema, setImageThemeByTema] = useState<ImageThemeId[]>([]);
@@ -467,6 +521,38 @@ export function WizardProvider({
     });
   }, []);
 
+  /** Generic helper behind the four cue CRUD functions below — both título and
+   * subtítulo cue lists are shaped identically (per-tema array of cue arrays),
+   * only the setter differs. */
+  function makeCueActions(setLists: React.Dispatch<React.SetStateAction<TextOverlayCue[][]>>) {
+    const add = (temaIdx: number) => {
+      setLists((prev) => {
+        const next = prev.map((cues) => [...cues]);
+        while (next.length <= temaIdx) next.push([]);
+        next[temaIdx].push({ id: crypto.randomUUID(), text: "", start: 0 });
+        return next;
+      });
+    };
+    const update = (temaIdx: number, cueId: string, patch: Partial<Pick<TextOverlayCue, "text" | "start">>) => {
+      setLists((prev) =>
+        prev.map((cues, i) => (i === temaIdx ? cues.map((c) => (c.id === cueId ? { ...c, ...patch } : c)) : cues)),
+      );
+    };
+    const remove = (temaIdx: number, cueId: string) => {
+      setLists((prev) => prev.map((cues, i) => (i === temaIdx ? cues.filter((c) => c.id !== cueId) : cues)));
+    };
+    return { add, update, remove };
+  }
+
+  const titleCueActions = useMemo(() => makeCueActions(setTitleCuesByTema), []);
+  const subtitleCueActions = useMemo(() => makeCueActions(setSubtitleCuesByTema), []);
+  const addTitleCue = titleCueActions.add;
+  const updateTitleCue = titleCueActions.update;
+  const removeTitleCue = titleCueActions.remove;
+  const addSubtitleCue = subtitleCueActions.add;
+  const updateSubtitleCue = subtitleCueActions.update;
+  const removeSubtitleCue = subtitleCueActions.remove;
+
   const addOwnImages = useCallback(
     async (files: FileList) => {
       const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
@@ -599,6 +685,8 @@ export function WizardProvider({
     setMusicMoodByTema(new Array(n).fill("auto"));
     setImageThemeByTema(new Array(n).fill("auto"));
     setImageAssignmentsByTema(Array.from({ length: n }, () => []));
+    setTitleCuesByTema(Array.from({ length: n }, () => []));
+    setSubtitleCuesByTema(Array.from({ length: n }, () => []));
   }, []);
 
   const applyVideos = useCallback(
@@ -898,6 +986,23 @@ export function WizardProvider({
                 captionFont,
                 captionShadow,
                 captionBackground,
+                captionPositionY: captionPositionY ?? undefined,
+                titleCues: (titleCuesByTema[i] ?? [])
+                  .filter((c) => c.text.trim())
+                  .map((c) => ({ text: c.text.trim(), start: c.start })),
+                titleAlign,
+                titleColor,
+                titleSize,
+                titleFont,
+                titleShadow,
+                subtitleCues: (subtitleCuesByTema[i] ?? [])
+                  .filter((c) => c.text.trim())
+                  .map((c) => ({ text: c.text.trim(), start: c.start })),
+                subtitleAlign,
+                subtitleColor,
+                subtitleSize,
+                subtitleFont,
+                subtitleShadow,
                 watermarkPath: watermark?.path,
                 watermarkPosition,
               }),
@@ -958,6 +1063,19 @@ export function WizardProvider({
     captionFont,
     captionShadow,
     captionBackground,
+    captionPositionY,
+    titleCuesByTema,
+    titleAlign,
+    titleColor,
+    titleSize,
+    titleFont,
+    titleShadow,
+    subtitleCuesByTema,
+    subtitleAlign,
+    subtitleColor,
+    subtitleSize,
+    subtitleFont,
+    subtitleShadow,
     sourceLabel,
     applyVideos,
     roteiros,
@@ -1035,6 +1153,8 @@ export function WizardProvider({
       audioUploading,
       audioError,
       imageAssignmentsByTema,
+      titleCuesByTema,
+      subtitleCuesByTema,
       selectedStyle,
       sceneSecondsByTema,
       musicMoodByTema,
@@ -1044,6 +1164,17 @@ export function WizardProvider({
       captionFont,
       captionShadow,
       captionBackground,
+      captionPositionY,
+      titleAlign,
+      titleColor,
+      titleSize,
+      titleFont,
+      titleShadow,
+      subtitleAlign,
+      subtitleColor,
+      subtitleSize,
+      subtitleFont,
+      subtitleShadow,
       watermark,
       watermarkPosition,
       watermarkUploading,
@@ -1071,6 +1202,12 @@ export function WizardProvider({
       neededSegmentsForTema,
       segmentTextsForTema,
       setImageAssignment,
+      addTitleCue,
+      updateTitleCue,
+      removeTitleCue,
+      addSubtitleCue,
+      updateSubtitleCue,
+      removeSubtitleCue,
       setDuration,
       setQty,
       qtyMax,
@@ -1094,6 +1231,17 @@ export function WizardProvider({
       setCaptionFont,
       setCaptionShadow,
       setCaptionBackground,
+      setCaptionPositionY,
+      setTitleAlign,
+      setTitleColor,
+      setTitleSize,
+      setTitleFont,
+      setTitleShadow,
+      setSubtitleAlign,
+      setSubtitleColor,
+      setSubtitleSize,
+      setSubtitleFont,
+      setSubtitleShadow,
       setSceneSecondsForTema,
       setMusicMoodForTema,
       setImageThemeForTema,
@@ -1145,6 +1293,8 @@ export function WizardProvider({
       audioUploading,
       audioError,
       imageAssignmentsByTema,
+      titleCuesByTema,
+      subtitleCuesByTema,
       selectedStyle,
       sceneSecondsByTema,
       musicMoodByTema,
@@ -1154,6 +1304,17 @@ export function WizardProvider({
       captionFont,
       captionShadow,
       captionBackground,
+      captionPositionY,
+      titleAlign,
+      titleColor,
+      titleSize,
+      titleFont,
+      titleShadow,
+      subtitleAlign,
+      subtitleColor,
+      subtitleSize,
+      subtitleFont,
+      subtitleShadow,
       watermark,
       watermarkPosition,
       watermarkUploading,
@@ -1175,6 +1336,12 @@ export function WizardProvider({
       neededSegmentsForTema,
       segmentTextsForTema,
       setImageAssignment,
+      addTitleCue,
+      updateTitleCue,
+      removeTitleCue,
+      addSubtitleCue,
+      updateSubtitleCue,
+      removeSubtitleCue,
       setDuration,
       setQty,
       qtyMax,

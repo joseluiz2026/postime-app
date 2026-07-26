@@ -13,9 +13,11 @@ import {
   type MusicMoodSelection,
   type SceneSeconds,
   type StyleName,
+  type TextAlign,
+  type TextOverlayCue,
   type WatermarkPosition,
 } from "@/lib/wizard-context";
-import { Btn, Card, Dropzone, FieldLabel, HelpTip, Pill } from "@/components/app/ui";
+import { Btn, Card, Dropzone, FieldLabel, HelpTip, Pill, TextInput } from "@/components/app/ui";
 
 const SCENE_SECONDS_OPTIONS: SceneSeconds[] = [1, 2, 3, 4, 5];
 
@@ -117,6 +119,66 @@ function TemaPhotoPanel({ temaIndex }: { temaIndex: number }) {
   );
 }
 
+/** A per-tema list of optional, timed título/subtítulo cues — add as many or
+ * as few as wanted (facultativo), each with its own text and start time. */
+function CueListEditor({
+  label,
+  cues,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  label: string;
+  cues: TextOverlayCue[];
+  onAdd: () => void;
+  onUpdate: (cueId: string, patch: Partial<Pick<TextOverlayCue, "text" | "start">>) => void;
+  onRemove: (cueId: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 w-full">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-[var(--text-3)]">{label} (opcional)</span>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="text-[11px] text-[var(--teal)] bg-transparent border-none cursor-pointer underline p-0"
+        >
+          + adicionar
+        </button>
+      </div>
+      {cues.map((cue) => (
+        <div key={cue.id} className="flex items-center gap-2">
+          <TextInput
+            value={cue.text}
+            onChange={(e) => onUpdate(cue.id, { text: e.target.value })}
+            placeholder={`Texto do ${label.toLowerCase()}`}
+            maxLength={200}
+            className="flex-1 !py-2 !text-[12.5px]"
+          />
+          <div className="flex items-center gap-1 shrink-0">
+            <input
+              type="number"
+              min={0}
+              value={cue.start}
+              onChange={(e) => onUpdate(cue.id, { start: Math.max(0, Number(e.target.value) || 0) })}
+              className="w-14 bg-[var(--bg-1)] border-[0.5px] border-[var(--line)] rounded-[7px] text-[11.5px] text-[var(--text-1)] px-2 py-1.5 outline-none hover:border-[var(--line-strong)] focus:border-[var(--gold)]"
+            />
+            <span className="text-[10.5px] text-[var(--text-3)]">s</span>
+          </div>
+          <button
+            type="button"
+            aria-label={`Remover ${label.toLowerCase()}`}
+            onClick={() => onRemove(cue.id)}
+            className="shrink-0 bg-transparent border-none text-[var(--text-3)] cursor-pointer text-sm leading-none flex hover:text-[var(--gold)]"
+          >
+            <Icon name="minus" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const CAPTION_COLOR_OPTIONS: { id: CaptionColor; label: string; swatch: string }[] = [
   { id: "auto", label: "Automático", swatch: "" },
   { id: "white", label: "Branco", swatch: "#ffffff" },
@@ -145,6 +207,97 @@ const CAPTION_FONT_OPTIONS: { id: CaptionFont; label: string }[] = [
   { id: "anton", label: "Impacto" },
   { id: "archivoblack", label: "Moderna" },
 ];
+
+const TEXT_ALIGN_OPTIONS: { id: TextAlign; label: string }[] = [
+  { id: "left", label: "Esquerda" },
+  { id: "center", label: "Centro" },
+  { id: "right", label: "Direita" },
+];
+
+/** Shared style controls for the Título/Subtítulo overlays — same control set
+ * (align/color/size/font/shadow) is repeated once per overlay, each with its
+ * own independent settings, so this stays a small parameterized block instead
+ * of duplicating five pill rows twice. */
+function OverlayStyleControls({
+  align,
+  onAlign,
+  color,
+  onColor,
+  size,
+  onSize,
+  font,
+  onFont,
+  shadow,
+  onShadow,
+}: {
+  align: TextAlign;
+  onAlign: (a: TextAlign) => void;
+  color: CaptionColor;
+  onColor: (c: CaptionColor) => void;
+  size: CaptionSize;
+  onSize: (s: CaptionSize) => void;
+  font: CaptionFont;
+  onFont: (f: CaptionFont) => void;
+  shadow: boolean;
+  onShadow: (v: boolean) => void;
+}) {
+  return (
+    <>
+      <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Alinhamento</span>
+      <div className="flex gap-2 mb-4">
+        {TEXT_ALIGN_OPTIONS.map((a) => (
+          <Pill key={a.id} selected={align === a.id} onClick={() => onAlign(a.id)}>
+            {a.label}
+          </Pill>
+        ))}
+      </div>
+      <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Cor</span>
+      <div className="flex gap-2 flex-wrap mb-4">
+        {CAPTION_COLOR_OPTIONS.map((c) => (
+          <Pill
+            key={c.id}
+            selected={color === c.id}
+            onClick={() => onColor(c.id)}
+            className="flex items-center gap-1.5"
+          >
+            {c.swatch && (
+              <span
+                className="w-2.5 h-2.5 rounded-full border-[0.5px] border-[var(--line-strong)] shrink-0"
+                style={{ background: c.swatch }}
+              />
+            )}
+            {c.label}
+          </Pill>
+        ))}
+      </div>
+      <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Tamanho</span>
+      <div className="flex gap-2 mb-4">
+        {CAPTION_SIZE_OPTIONS.map((s) => (
+          <Pill key={s.id} selected={size === s.id} onClick={() => onSize(s.id)}>
+            {s.label}
+          </Pill>
+        ))}
+      </div>
+      <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Fonte</span>
+      <div className="flex gap-2 mb-4">
+        {CAPTION_FONT_OPTIONS.map((f) => (
+          <Pill key={f.id} selected={font === f.id} onClick={() => onFont(f.id)}>
+            {f.label}
+          </Pill>
+        ))}
+      </div>
+      <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Sombra</span>
+      <div className="flex gap-2">
+        <Pill selected={shadow} onClick={() => onShadow(true)}>
+          Ativada
+        </Pill>
+        <Pill selected={!shadow} onClick={() => onShadow(false)}>
+          Desativada
+        </Pill>
+      </div>
+    </>
+  );
+}
 
 const STYLES: { name: StyleName; desc: string; preview: React.ReactNode }[] = [
   {
@@ -405,6 +558,77 @@ export default function EstiloPage() {
             </Pill>
           ))}
         </div>
+        <span className="block text-xs font-medium text-[var(--text-2)] mt-4 mb-2">
+          Posição vertical da legenda
+          <HelpTip
+            label="Como funciona a posição"
+            text="Arraste o controle para mover a legenda para cima ou para baixo na tela e ancorar onde achar melhor. 'Automático' usa a posição padrão de cada Estilo."
+          />
+        </span>
+        <div className="flex items-center gap-3 max-w-[420px]">
+          <span className="text-[11px] text-[var(--text-3)] shrink-0">Topo</span>
+          <input
+            type="range"
+            min={5}
+            max={95}
+            value={wizard.captionPositionY ?? 80}
+            onChange={(e) => wizard.setCaptionPositionY(Number(e.target.value))}
+            className="flex-1 accent-[var(--gold)]"
+          />
+          <span className="text-[11px] text-[var(--text-3)] shrink-0">Base</span>
+        </div>
+        <div className="flex items-center gap-3 mt-1.5">
+          <span className="text-[11px] text-[var(--text-3)]">
+            {wizard.captionPositionY === null ? "Automático (padrão do estilo)" : `${wizard.captionPositionY}%`}
+          </span>
+          {wizard.captionPositionY !== null && (
+            <button
+              type="button"
+              onClick={() => wizard.setCaptionPositionY(null)}
+              className="text-[11px] text-[var(--teal)] bg-transparent border-none cursor-pointer underline p-0"
+            >
+              Voltar ao automático
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
+        <FieldLabel>
+          Título
+          <HelpTip
+            label="Como funciona o título"
+            text="Um texto no topo do vídeo, opcional — pode adicionar quantos quiser e escolher em que segundo cada um aparece (fica uns segundos na tela e some). Adicione os títulos de cada vídeo na lista de temas logo abaixo — aqui você só ajusta a aparência, que vale para todos."
+          />
+        </FieldLabel>
+        <OverlayStyleControls
+          align={wizard.titleAlign}
+          onAlign={wizard.setTitleAlign}
+          color={wizard.titleColor}
+          onColor={wizard.setTitleColor}
+          size={wizard.titleSize}
+          onSize={wizard.setTitleSize}
+          font={wizard.titleFont}
+          onFont={wizard.setTitleFont}
+          shadow={wizard.titleShadow}
+          onShadow={wizard.setTitleShadow}
+        />
+      </div>
+
+      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
+        <FieldLabel>Subtítulo</FieldLabel>
+        <OverlayStyleControls
+          align={wizard.subtitleAlign}
+          onAlign={wizard.setSubtitleAlign}
+          color={wizard.subtitleColor}
+          onColor={wizard.setSubtitleColor}
+          size={wizard.subtitleSize}
+          onSize={wizard.setSubtitleSize}
+          font={wizard.subtitleFont}
+          onFont={wizard.setSubtitleFont}
+          shadow={wizard.subtitleShadow}
+          onShadow={wizard.setSubtitleShadow}
+        />
       </div>
 
       {n > 0 && (
@@ -470,6 +694,20 @@ export default function EstiloPage() {
                     ))}
                   </div>
                 </div>
+                <CueListEditor
+                  label="Título"
+                  cues={wizard.titleCuesByTema[i] ?? []}
+                  onAdd={() => wizard.addTitleCue(i)}
+                  onUpdate={(cueId, patch) => wizard.updateTitleCue(i, cueId, patch)}
+                  onRemove={(cueId) => wizard.removeTitleCue(i, cueId)}
+                />
+                <CueListEditor
+                  label="Subtítulo"
+                  cues={wizard.subtitleCuesByTema[i] ?? []}
+                  onAdd={() => wizard.addSubtitleCue(i)}
+                  onUpdate={(cueId, patch) => wizard.updateSubtitleCue(i, cueId, patch)}
+                  onRemove={(cueId) => wizard.removeSubtitleCue(i, cueId)}
+                />
               </div>
             ))}
           </div>
