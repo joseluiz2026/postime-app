@@ -4,7 +4,7 @@ import path from "path";
 import { NextResponse } from "next/server";
 import { probeDurationSeconds, renderKenBurnsVideo } from "@/lib/render/ken-burns";
 import { estimateReadingDurationSeconds, splitTextIntoChunks } from "@/lib/render/captions";
-import { searchPexelsImage } from "@/lib/images/pexels";
+import { searchStockImage } from "@/lib/images/stock";
 import { pickMusicTrack } from "@/lib/audio/music-picker";
 import { createClient } from "@/lib/supabase/server";
 import { dailyVideoLimitFor, getAccessPhase } from "@/lib/plan";
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
       const extra = await Promise.all(
         chunks.slice(1).map(async (chunk) => {
           try {
-            const found = await searchPexelsImage(chunk, { themeQuery: imageTheme });
+            const found = await searchStockImage(chunk, { themeQuery: imageTheme });
             return found?.url ?? null;
           } catch {
             return null;

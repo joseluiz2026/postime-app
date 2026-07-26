@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { searchPexelsImage } from "@/lib/images/pexels";
+import { searchStockImage } from "@/lib/images/stock";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
   try {
     const images = await Promise.all(
-      queries.map((q: string, i: number) => searchPexelsImage(q, { themeQuery: themes[i] })),
+      queries.map((q: string, i: number) => searchStockImage(q, { themeQuery: themes[i] })),
     );
     return NextResponse.json({ images });
   } catch (err) {
