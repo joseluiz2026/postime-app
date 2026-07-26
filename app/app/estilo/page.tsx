@@ -137,15 +137,19 @@ function CueListEditor({
   return (
     <div className="flex flex-col gap-1.5 w-full">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] text-[var(--text-3)]">{label} (opcional)</span>
+        <span className="text-[12px] font-medium text-[var(--text-2)]">{label}</span>
         <button
           type="button"
           onClick={onAdd}
-          className="text-[11px] text-[var(--teal)] bg-transparent border-none cursor-pointer underline p-0"
+          className="flex items-center gap-1 text-[12px] font-medium text-[var(--teal)] bg-transparent border-[0.5px] border-[var(--teal)] rounded-[7px] cursor-pointer px-2.5 py-1 hover:bg-[color-mix(in_srgb,var(--teal)_10%,transparent)]"
         >
-          + adicionar
+          <Icon name="plus" />
+          Adicionar {label.toLowerCase()}
         </button>
       </div>
+      {cues.length === 0 && (
+        <p className="text-[11.5px] text-[var(--text-3)] italic">Nenhum {label.toLowerCase()} — opcional.</p>
+      )}
       {cues.map((cue) => (
         <div key={cue.id} className="flex items-center gap-2">
           <TextInput
@@ -694,20 +698,29 @@ export default function EstiloPage() {
                     ))}
                   </div>
                 </div>
-                <CueListEditor
-                  label="Título"
-                  cues={wizard.titleCuesByTema[i] ?? []}
-                  onAdd={() => wizard.addTitleCue(i)}
-                  onUpdate={(cueId, patch) => wizard.updateTitleCue(i, cueId, patch)}
-                  onRemove={(cueId) => wizard.removeTitleCue(i, cueId)}
-                />
-                <CueListEditor
-                  label="Subtítulo"
-                  cues={wizard.subtitleCuesByTema[i] ?? []}
-                  onAdd={() => wizard.addSubtitleCue(i)}
-                  onUpdate={(cueId, patch) => wizard.updateSubtitleCue(i, cueId, patch)}
-                  onRemove={(cueId) => wizard.removeSubtitleCue(i, cueId)}
-                />
+                <div className="w-full flex flex-col gap-3 p-3 rounded-lg bg-[var(--bg-1)] border-[0.5px] border-[var(--line-strong)]">
+                  <span className="text-[12.5px] font-semibold text-[var(--text-1)]">
+                    Título e subtítulo deste vídeo
+                    <HelpTip
+                      label="Como funciona título e subtítulo"
+                      text="Textos opcionais que aparecem no topo do vídeo em segundos específicos (você escolhe o segundo de cada um). A aparência (cor, fonte, tamanho...) é ajustada lá em cima, em 'Título' e 'Subtítulo' — aqui você só define o texto e quando cada um aparece, vídeo por vídeo."
+                    />
+                  </span>
+                  <CueListEditor
+                    label="Título"
+                    cues={wizard.titleCuesByTema[i] ?? []}
+                    onAdd={() => wizard.addTitleCue(i)}
+                    onUpdate={(cueId, patch) => wizard.updateTitleCue(i, cueId, patch)}
+                    onRemove={(cueId) => wizard.removeTitleCue(i, cueId)}
+                  />
+                  <CueListEditor
+                    label="Subtítulo"
+                    cues={wizard.subtitleCuesByTema[i] ?? []}
+                    onAdd={() => wizard.addSubtitleCue(i)}
+                    onUpdate={(cueId, patch) => wizard.updateSubtitleCue(i, cueId, patch)}
+                    onRemove={(cueId) => wizard.removeSubtitleCue(i, cueId)}
+                  />
+                </div>
               </div>
             ))}
           </div>
