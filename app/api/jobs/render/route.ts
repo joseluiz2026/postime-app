@@ -14,6 +14,7 @@ import { sendLimitReachedEmailOnce } from "@/lib/admin/message-templates";
 const ALLOWED_SCENE_SECONDS = [1, 2, 3, 4, 5] as const;
 const DEFAULT_SCENE_SECONDS = 3;
 const ALLOWED_CAPTION_COLORS = ["auto", "white", "black", "yellow", "red"] as const;
+const ALLOWED_CAPTION_BACKGROUNDS = ["auto", "none", "white", "black", "yellow", "red"] as const;
 const ALLOWED_CAPTION_SIZES = ["small", "medium", "large"] as const;
 const ALLOWED_CAPTION_FONTS = ["poppins", "anton", "archivoblack"] as const;
 const ALLOWED_WATERMARK_POSITIONS = ["top-left", "top-right", "bottom-left", "bottom-right"] as const;
@@ -68,6 +69,9 @@ export async function POST(request: Request) {
   const captionSize = ALLOWED_CAPTION_SIZES.includes(body?.captionSize) ? (body.captionSize as string) : "medium";
   const captionFont = ALLOWED_CAPTION_FONTS.includes(body?.captionFont) ? (body.captionFont as string) : "poppins";
   const captionShadow = body?.captionShadow === true;
+  const captionBackground = ALLOWED_CAPTION_BACKGROUNDS.includes(body?.captionBackground)
+    ? (body.captionBackground as string)
+    : "auto";
   const watermarkPath = typeof body?.watermarkPath === "string" ? body.watermarkPath : "";
   const watermarkPosition = ALLOWED_WATERMARK_POSITIONS.includes(body?.watermarkPosition)
     ? (body.watermarkPosition as string)
@@ -183,6 +187,7 @@ export async function POST(request: Request) {
       captionColor: captionColor === "auto" ? undefined : captionColor,
       captionSize,
       captionShadow,
+      captionBackground,
       watermarkPath: watermarkFile,
       watermarkPosition: watermarkFile ? (watermarkPosition as "top-left" | "top-right" | "bottom-left" | "bottom-right") : undefined,
       captionFont,

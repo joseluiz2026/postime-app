@@ -54,6 +54,7 @@ export type StyleName =
 export type SceneSeconds = 1 | 2 | 3 | 4 | 5;
 export type MusicMoodSelection = MusicMood | "auto";
 export type CaptionColor = "auto" | "white" | "black" | "yellow" | "red";
+export type CaptionBackground = "auto" | "none" | "white" | "black" | "yellow" | "red";
 export type CaptionSize = "small" | "medium" | "large";
 export type CaptionFont = "poppins" | "anton" | "archivoblack";
 export type WatermarkPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -180,6 +181,7 @@ type WizardState = {
   captionSize: CaptionSize;
   captionFont: CaptionFont;
   captionShadow: boolean;
+  captionBackground: CaptionBackground;
   watermark: { url: string; path: string } | null;
   watermarkPosition: WatermarkPosition;
   watermarkUploading: boolean;
@@ -239,6 +241,7 @@ type WizardContextValue = WizardState & {
   setCaptionSize: (s: CaptionSize) => void;
   setCaptionFont: (f: CaptionFont) => void;
   setCaptionShadow: (v: boolean) => void;
+  setCaptionBackground: (b: CaptionBackground) => void;
   setSceneSecondsForTema: (idx: number, s: SceneSeconds) => void;
   setMusicMoodForTema: (idx: number, m: MusicMoodSelection) => void;
   setImageThemeForTema: (idx: number, id: ImageThemeId) => void;
@@ -327,6 +330,7 @@ export function WizardProvider({
   const [captionSize, setCaptionSize] = useState<CaptionSize>("medium");
   const [captionFont, setCaptionFont] = useState<CaptionFont>("poppins");
   const [captionShadow, setCaptionShadow] = useState(false);
+  const [captionBackground, setCaptionBackground] = useState<CaptionBackground>("auto");
   const [sceneSecondsByTema, setSceneSecondsByTema] = useState<SceneSeconds[]>([]);
   const [musicMoodByTema, setMusicMoodByTema] = useState<MusicMoodSelection[]>([]);
   const [imageThemeByTema, setImageThemeByTema] = useState<ImageThemeId[]>([]);
@@ -893,6 +897,7 @@ export function WizardProvider({
                 captionSize,
                 captionFont,
                 captionShadow,
+                captionBackground,
                 watermarkPath: watermark?.path,
                 watermarkPosition,
               }),
@@ -952,6 +957,7 @@ export function WizardProvider({
     captionSize,
     captionFont,
     captionShadow,
+    captionBackground,
     sourceLabel,
     applyVideos,
     roteiros,
@@ -1037,6 +1043,7 @@ export function WizardProvider({
       captionSize,
       captionFont,
       captionShadow,
+      captionBackground,
       watermark,
       watermarkPosition,
       watermarkUploading,
@@ -1086,6 +1093,7 @@ export function WizardProvider({
       setCaptionSize,
       setCaptionFont,
       setCaptionShadow,
+      setCaptionBackground,
       setSceneSecondsForTema,
       setMusicMoodForTema,
       setImageThemeForTema,
@@ -1145,6 +1153,7 @@ export function WizardProvider({
       captionSize,
       captionFont,
       captionShadow,
+      captionBackground,
       watermark,
       watermarkPosition,
       watermarkUploading,

@@ -67,6 +67,14 @@ const CAPTION_SIZE_MULTIPLIERS: Record<string, number> = { small: 0.8, medium: 1
 // Plain ffmpeg-recognized color names — no need for hex, and these read fine
 // as classic subtitle colors regardless of the app's own UI theme.
 const CAPTION_COLOR_MAP: Record<string, string> = { white: "white", black: "black", yellow: "yellow", red: "red" };
+// Fixed opacities picked for legibility per color — white needs to be more
+// opaque than black to still read as a solid panel behind light-on-dark text.
+const CAPTION_BG_COLOR_MAP: Record<string, string> = {
+  white: "white@0.8",
+  black: "black@0.5",
+  yellow: "0xFFD54A@0.85",
+  red: "0xB91C1C@0.6",
+};
 const CAPTION_FONT_FILES: Record<string, string> = {
   poppins: "Poppins-Bold.ttf",
   anton: "Anton-Regular.ttf",
@@ -241,10 +249,17 @@ async function buildCaptionChain(opts: {
   captionSize?: string;
   captionFont?: string;
   captionShadow?: boolean;
+  captionBackground?: string;
 }): Promise<{ lines: string[]; outLabel: string }> {
   const cfg = STYLE_CONFIGS[opts.style] ?? STYLE_CONFIGS[DEFAULT_STYLE];
   const fontsize = Math.round(cfg.fontsize * (CAPTION_SIZE_MULTIPLIERS[opts.captionSize ?? "medium"] ?? 1));
   const fontcolor = (opts.captionColor && CAPTION_COLOR_MAP[opts.captionColor]) || cfg.fontcolor;
+  // "none" forces the box off regardless of the style's own default; a color
+  // forces it on with that color; "auto"/undefined keeps the style's own box
+  // and boxcolor exactly as before (no regression for existing behavior).
+  const bg = opts.captionBackground;
+  const hasBox = bg === "none" ? false : bg && bg !== "auto" ? true : cfg.box;
+  const boxcolorOverride = bg && bg !== "auto" && bg !== "none" ? CAPTION_BG_COLOR_MAP[bg] : undefined;
   const widthRatios = CAPTION_FONT_WIDTH_RATIOS[opts.captionFont ?? "poppins"] ?? CAPTION_FONT_WIDTH_RATIOS.poppins;
   const segments = buildCaptionSegments(opts.text, opts.duration, cfg.mode);
   const lines: string[] = [];
@@ -281,15 +296,21 @@ async function buildCaptionChain(opts: {
       `fontsize=${fontsize}`,
       `fontcolor=${fontcolor}`,
       `x=(w-text_w)/2`,
+      // x=(w-text_w)/2 alone only centers the block by its widest wrapped line —
+      // shorter lines then sit left-aligned inside that block. text_align=center
+      // re-centers each line within the block so every line reads centered.
+      `text_align=center`,
       cfg.rise > 0
         ? `y='${cfg.y}+(1-min((t-${start})/0.12,1))*${cfg.rise}'`
         : `y='${cfg.y}'`,
     ];
-    if (cfg.box) {
-      // A style's default box is usually a dark translucent panel — if the
-      // user picked black caption text on top of it, swap to a light panel
-      // so the text doesn't disappear against its own background.
-      const boxcolor = fontcolor === "black" && cfg.boxcolor.includes("black") ? "white@0.75" : cfg.boxcolor;
+    if (hasBox) {
+      // A dark translucent panel is usually the default — if the user picked
+      // black caption text on top of it (and didn't also override the
+      // background color), swap to a light panel so the text doesn't
+      // disappear against its own background.
+      const boxcolor =
+        boxcolorOverride ?? (fontcolor === "black" && cfg.boxcolor.includes("black") ? "white@0.75" : cfg.boxcolor);
       parts.push(`box=1`, `boxcolor=${boxcolor}`, `boxborderw=${cfg.boxborderw}`);
     }
     if (opts.captionShadow) {
@@ -342,6 +363,7 @@ export async function renderKenBurnsVideo(opts: {
   captionSize?: string;
   captionFont?: string;
   captionShadow?: boolean;
+  captionBackground?: string;
   durationSeconds?: number;
   musicPath?: string;
   watermarkPath?: string;
@@ -381,6 +403,7 @@ export async function renderKenBurnsVideo(opts: {
       captionSize: opts.captionSize,
       captionFont: opts.captionFont,
       captionShadow: opts.captionShadow,
+      captionBackground: opts.captionBackground,
     });
     filterLines.push(...chain.lines);
     outLabel = chain.outLabel;

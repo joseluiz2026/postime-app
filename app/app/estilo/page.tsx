@@ -6,6 +6,7 @@ import { Icon } from "@/lib/icons";
 import { IMAGE_THEMES } from "@/lib/images/themes";
 import {
   useWizard,
+  type CaptionBackground,
   type CaptionColor,
   type CaptionFont,
   type CaptionSize,
@@ -118,6 +119,15 @@ function TemaPhotoPanel({ temaIndex }: { temaIndex: number }) {
 
 const CAPTION_COLOR_OPTIONS: { id: CaptionColor; label: string; swatch: string }[] = [
   { id: "auto", label: "Automático", swatch: "" },
+  { id: "white", label: "Branco", swatch: "#ffffff" },
+  { id: "black", label: "Preto", swatch: "#0b0b0b" },
+  { id: "yellow", label: "Amarelo", swatch: "#facc15" },
+  { id: "red", label: "Vermelho", swatch: "#ef4444" },
+];
+
+const CAPTION_BACKGROUND_OPTIONS: { id: CaptionBackground; label: string; swatch: string }[] = [
+  { id: "auto", label: "Automático", swatch: "" },
+  { id: "none", label: "Nenhum", swatch: "" },
   { id: "white", label: "Branco", swatch: "#ffffff" },
   { id: "black", label: "Preto", swatch: "#0b0b0b" },
   { id: "yellow", label: "Amarelo", swatch: "#facc15" },
@@ -362,13 +372,38 @@ export default function EstiloPage() {
           ))}
         </div>
         <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Sombra na legenda</span>
-        <div className="flex gap-2">
+        <div className="flex gap-2 mb-4">
           <Pill selected={wizard.captionShadow} onClick={() => wizard.setCaptionShadow(true)}>
             Ativada
           </Pill>
           <Pill selected={!wizard.captionShadow} onClick={() => wizard.setCaptionShadow(false)}>
             Desativada
           </Pill>
+        </div>
+        <span className="block text-xs font-medium text-[var(--text-2)] mb-2">
+          Fundo da legenda
+          <HelpTip
+            label="Como funciona o fundo"
+            text="No automático, cada Estilo já tem um fundo pensado pra ele (alguns têm painel atrás do texto, outros não). Escolhendo 'Nenhum' ou uma cor aqui, isso substitui o padrão do estilo em todos os vídeos."
+          />
+        </span>
+        <div className="flex gap-2 flex-wrap">
+          {CAPTION_BACKGROUND_OPTIONS.map((b) => (
+            <Pill
+              key={b.id}
+              selected={wizard.captionBackground === b.id}
+              onClick={() => wizard.setCaptionBackground(b.id)}
+              className="flex items-center gap-1.5"
+            >
+              {b.swatch && (
+                <span
+                  className="w-2.5 h-2.5 rounded-full border-[0.5px] border-[var(--line-strong)] shrink-0"
+                  style={{ background: b.swatch }}
+                />
+              )}
+              {b.label}
+            </Pill>
+          ))}
         </div>
       </div>
 
