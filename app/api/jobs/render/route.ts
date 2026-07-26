@@ -4,6 +4,7 @@ import path from "path";
 import { NextResponse } from "next/server";
 import { probeDurationSeconds, renderKenBurnsVideo } from "@/lib/render/ken-burns";
 import { estimateReadingDurationSeconds, splitTextIntoChunks } from "@/lib/render/captions";
+import { computeSegmentCount } from "@/lib/render/segments";
 import { searchStockImage } from "@/lib/images/stock";
 import { pickMusicTrack } from "@/lib/audio/music-picker";
 import { createClient } from "@/lib/supabase/server";
@@ -16,10 +17,6 @@ const ALLOWED_CAPTION_COLORS = ["auto", "white", "black", "yellow", "red"] as co
 const ALLOWED_CAPTION_SIZES = ["small", "medium", "large"] as const;
 const ALLOWED_CAPTION_FONTS = ["poppins", "anton", "archivoblack"] as const;
 const ALLOWED_WATERMARK_POSITIONS = ["top-left", "top-right", "bottom-left", "bottom-right"] as const;
-const MAX_IMAGE_SEGMENTS = 30;
-// Padding added to narration/caption duration before splitting into scenes — gives
-// the scene count a little slack instead of exactly matching the spoken content.
-const SCENE_COUNT_PADDING_SECONDS = 6;
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -75,6 +72,12 @@ export async function POST(request: Request) {
   const watermarkPosition = ALLOWED_WATERMARK_POSITIONS.includes(body?.watermarkPosition)
     ? (body.watermarkPosition as string)
     : "bottom-right";
+  // Per-segment own-photo overrides (from the Estilo "Fotos por vídeo" picker) — index
+  // k is the k-th image segment of this video. A non-https entry is treated as "no
+  // override for this slot", same as it being absent — that slot still auto-fetches stock.
+  const ownImageUrls: (string | null)[] = Array.isArray(body?.ownImageUrls)
+    ? body.ownImageUrls.map((v: unknown) => (typeof v === "string" && /^https:\/\//.test(v) ? v : null))
+    : [];
   const hasAudio = audioPath.length > 0;
   const hasWatermark = watermarkPath.length > 0;
   if (
@@ -113,33 +116,43 @@ export async function POST(request: Request) {
     } else {
       duration = estimateReadingDurationSeconds(captionText!);
     }
-    const numSegments = Math.max(
-      1,
-      Math.min(MAX_IMAGE_SEGMENTS, Math.round((duration + SCENE_COUNT_PADDING_SECONDS) / sceneSeconds)),
-    );
+    const numSegments = computeSegmentCount(duration, sceneSeconds);
 
-    // First segment reuses the already-fetched cover image (keeps the video's opening
-    // frame consistent with the thumbnail shown in the UI); extra segments get their
-    // own Pexels image, one per text chunk, so each image relates to that part of
-    // the narration.
-    const imageUrls = [imageUrl];
-    if (numSegments > 1 && captionText) {
+    // Segment 0 is the already-fetched cover image (keeps the video's opening frame
+    // consistent with the thumbnail shown in the UI) unless the user explicitly
+    // assigned their own photo to that slot. Any other segment uses the user's
+    // assigned photo when present (skipping the stock search entirely — this is what
+    // makes "só minhas fotos" possible with zero stock-provider calls); segments left
+    // unassigned fall back to one auto-fetched stock photo per text chunk, same as before.
+    const imageUrls: (string | null)[] = new Array(numSegments).fill(null);
+    imageUrls[0] = ownImageUrls[0] || imageUrl;
+    for (let k = 1; k < numSegments; k++) {
+      if (ownImageUrls[k]) imageUrls[k] = ownImageUrls[k];
+    }
+    const autoIndices = imageUrls.reduce<number[]>((acc, v, k) => {
+      if (v === null) acc.push(k);
+      return acc;
+    }, []);
+    if (autoIndices.length > 0 && captionText) {
       const chunks = splitTextIntoChunks(captionText, numSegments);
-      const extra = await Promise.all(
-        chunks.slice(1).map(async (chunk) => {
+      const fetched = await Promise.all(
+        autoIndices.map(async (k) => {
           try {
-            const found = await searchStockImage(chunk, { themeQuery: imageTheme });
+            const found = await searchStockImage(chunks[k] ?? captionText, { themeQuery: imageTheme });
             return found?.url ?? null;
           } catch {
             return null;
           }
         }),
       );
-      for (const url of extra) imageUrls.push(url ?? imageUrl);
+      autoIndices.forEach((k, pos) => {
+        imageUrls[k] = fetched[pos] ?? imageUrl;
+      });
     }
+    const finalImageUrls = imageUrls.map((v) => v ?? imageUrl);
 
     const imageFiles = await Promise.all(
-      imageUrls.map(async (url, i) => {
+      finalImageUrls.map(async (url, i) => {
         const imgRes = await fetch(url);
         if (!imgRes.ok) throw new Error("image_download_failed");
         const imageFile = path.join(dir, `image${i}.jpg`);

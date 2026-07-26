@@ -35,6 +35,87 @@ const MUSIC_MOOD_OPTIONS: { id: MusicMoodSelection; label: string }[] = [
 
 const IMAGE_THEME_OPTIONS = IMAGE_THEMES.map((t) => ({ id: t.id, label: t.label }));
 
+/**
+ * Per-video photo assignment: shows every image segment that tema's render will
+ * build (derived from narration duration ÷ segundos por cena) and lets the user
+ * assign one of their uploaded photos to any slot. The app infers the mode from
+ * the count alone — 0 assigned stays fully automatic, assigned ≥ needed uses only
+ * own photos, anything in between fills the gaps with free stock — no separate
+ * mode toggle needed.
+ */
+function TemaPhotoPanel({ temaIndex }: { temaIndex: number }) {
+  const wizard = useWizard();
+  const [open, setOpen] = useState(false);
+  const needed = wizard.neededSegmentsForTema(temaIndex);
+  const texts = wizard.segmentTextsForTema(temaIndex);
+  const assignments = wizard.imageAssignmentsByTema[temaIndex] ?? [];
+  const assignedCount = Array.from({ length: needed }, (_, k) => assignments[k]).filter(Boolean).length;
+
+  let statusLabel: string;
+  let statusClass: string;
+  if (assignedCount === 0) {
+    statusLabel = "Automático · bancos gratuitos";
+    statusClass = "text-[var(--text-3)]";
+  } else if (assignedCount >= needed) {
+    statusLabel = "Só suas fotos";
+    statusClass = "text-[var(--teal)]";
+  } else {
+    statusLabel = `${assignedCount} de ${needed} suas · resto automático`;
+    statusClass = "text-[var(--gold)]";
+  }
+
+  return (
+    <div className="rounded-lg bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-3 p-3 text-left bg-transparent border-none cursor-pointer"
+      >
+        <span className="text-[12.5px] font-semibold text-[var(--text-1)] shrink-0 w-16">
+          Tema {String(temaIndex + 1).padStart(2, "0")}
+        </span>
+        <span className="text-[11.5px] text-[var(--text-3)] shrink-0">
+          {needed} {needed === 1 ? "imagem" : "imagens"} necessária{needed === 1 ? "" : "s"}
+        </span>
+        <span className={`text-[11.5px] ml-auto shrink-0 ${statusClass}`}>{statusLabel}</span>
+        <Icon
+          name="chevron-right"
+          className={`text-[var(--text-3)] shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="border-t-[0.5px] border-[var(--line)] p-3 flex flex-col gap-2">
+          {texts.map((snippet, k) => (
+            <div key={k} className="flex items-center gap-2.5">
+              <span className="text-[10.5px] font-mono text-[var(--text-3)] w-5 shrink-0">
+                {String(k + 1).padStart(2, "0")}
+              </span>
+              <span
+                className="text-[12px] text-[var(--text-2)] flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
+                title={snippet}
+              >
+                {snippet}
+              </span>
+              <select
+                value={assignments[k] ?? ""}
+                onChange={(e) => wizard.setImageAssignment(temaIndex, k, e.target.value || null)}
+                className="shrink-0 max-w-[170px] bg-[var(--bg-1)] border-[0.5px] border-[var(--line)] rounded-[7px] text-[11.5px] text-[var(--text-1)] px-2 py-1.5 outline-none cursor-pointer hover:border-[var(--line-strong)] focus:border-[var(--gold)]"
+              >
+                <option value="">Automático</option>
+                {wizard.ownImages.map((img) => (
+                  <option key={img.path} value={img.url}>
+                    {img.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const CAPTION_COLOR_OPTIONS: { id: CaptionColor; label: string; swatch: string }[] = [
   { id: "auto", label: "Automático", swatch: "" },
   { id: "white", label: "Branco", swatch: "#ffffff" },
@@ -188,10 +269,7 @@ export default function EstiloPage() {
   const [showWarning, setShowWarning] = useState(false);
   const [prevN, setPrevN] = useState(n);
   const sortedSelected = [...wizard.selectedForVideo].sort((a, b) => a - b);
-  const matched = wizard.matchedOwnImageIndices();
-  const matchedTemas = wizard.selectedForVideo
-    .map((i) => ({ i, img: wizard.matchedOwnImageForRoteiro(i) }))
-    .filter((x): x is { i: number; img: NonNullable<typeof x.img> } => Boolean(x.img));
+  const assignedUrls = wizard.assignedOwnImageUrls();
   const smoothProgressPct = useSmoothBuildProgress(
     wizard.buildingVideos,
     wizard.buildProgress?.completed ?? 0,
@@ -367,20 +445,18 @@ export default function EstiloPage() {
         <FieldLabel>
           Imagens próprias (opcional)
           <HelpTip
-            label="Como funciona o encaixe automático"
+            label="Como encaixar suas fotos nos vídeos"
             text={
               <>
-                O nome do arquivo é usado pra encaixar a imagem automaticamente. Se o roteiro menciona &quot;praia de
-                Copacabana&quot;, nomeie o arquivo como <strong>copacabana.jpg</strong> — o POSTime reconhece a
-                palavra e usa essa foto como capa do vídeo desse tema, em vez de buscar uma genérica nos bancos
-                gratuitos.
+                Envie suas fotos aqui e depois abra <strong>&quot;Fotos por vídeo&quot;</strong> logo abaixo pra
+                escolher, vídeo por vídeo, em qual cena cada uma entra. Sem foto atribuída, o vídeo inteiro usa fotos
+                dos bancos gratuitos automaticamente.
               </>
             }
           />
         </FieldLabel>
         <p className="text-[13px] text-[var(--text-2)] mb-4 leading-relaxed">
-          Suas próprias fotos, de lugares, pessoas ou produtos citados no roteiro. <strong>Aviso:</strong> nomeie o
-          arquivo com a mesma palavra citada no roteiro — é assim que ele vira a capa do vídeo certo.
+          Suas próprias fotos, de lugares, pessoas ou produtos citados no roteiro.
         </p>
         <Dropzone
           icon="photo"
@@ -401,7 +477,7 @@ export default function EstiloPage() {
               <div
                 key={img.path}
                 className={`flex items-center gap-2 bg-[var(--bg-2)] border-[0.5px] rounded-[9px] pl-1.5 pr-2 py-1.5 text-xs text-[var(--text-2)] max-w-[220px] ${
-                  matched.has(idx) ? "border-[var(--teal)]" : "border-[var(--line)]"
+                  assignedUrls.has(img.url) ? "border-[var(--teal)]" : "border-[var(--line)]"
                 }`}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -409,8 +485,8 @@ export default function EstiloPage() {
                 <span className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px]" title={img.name}>
                   {img.name}
                 </span>
-                {matched.has(idx) && (
-                  <span className="text-[var(--teal)] text-[13px] shrink-0" title="Encaixado automaticamente no roteiro">
+                {assignedUrls.has(img.url) && (
+                  <span className="text-[var(--teal)] text-[13px] shrink-0" title="Atribuída a pelo menos um vídeo">
                     <Icon name="check" />
                   </span>
                 )}
@@ -426,17 +502,30 @@ export default function EstiloPage() {
             ))}
           </div>
         )}
-        {matchedTemas.length > 0 && (
-          <div className="flex flex-col gap-1 mt-4">
-            {matchedTemas.map(({ i, img }) => (
-              <p key={i} className="text-[12.5px] text-[var(--teal)] m-0 flex items-center gap-1.5">
-                <Icon name="check" /> Tema {String(i + 1).padStart(2, "0")} vai usar sua foto:{" "}
-                <span className="font-mono">{img.name}</span>
-              </p>
+      </div>
+
+      {wizard.ownImages.length > 0 && n > 0 && (
+        <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
+          <FieldLabel>
+            Fotos por vídeo
+            <HelpTip
+              label="Como funciona"
+              text={
+                <>
+                  Cada vídeo é montado com várias cenas — abra um tema pra ver quantas e escolher qual das suas fotos
+                  entra em cada uma. Deixou algumas em &quot;Automático&quot;? Elas são preenchidas com fotos grátis.
+                  Atribuiu todas? O vídeo usa só suas fotos, sem buscar nada nos bancos gratuitos.
+                </>
+              }
+            />
+          </FieldLabel>
+          <div className="flex flex-col gap-2">
+            {sortedSelected.map((i) => (
+              <TemaPhotoPanel key={i} temaIndex={i} />
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
         <FieldLabel>

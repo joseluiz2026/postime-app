@@ -13,6 +13,8 @@ import {
 } from "react";
 import type { LlmProvider } from "./ai/generate-roteiros";
 import type { MusicMood } from "./audio/moods";
+import { estimateReadingDurationSeconds, splitTextIntoChunks } from "./render/captions";
+import { computeSegmentCount } from "./render/segments";
 import { themeQueryFor, type ImageThemeId } from "./images/themes";
 import {
   type AccessPhase,
@@ -23,6 +25,22 @@ import {
   getPhaseDaysLeft,
 } from "./plan";
 import { createClient } from "./supabase/client";
+
+/** Reads a recorded/uploaded audio Blob's duration without uploading it first —
+ * lets the photo-assignment picker show "N imagens necessárias" immediately. */
+function readAudioDuration(blob: Blob): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio();
+    const cleanup = (result: number | null) => {
+      URL.revokeObjectURL(url);
+      resolve(result);
+    };
+    audio.onloadedmetadata = () => cleanup(Number.isFinite(audio.duration) ? audio.duration : null);
+    audio.onerror = () => cleanup(null);
+    audio.src = url;
+  });
+}
 
 export type { Duration } from "./plan";
 export type SourceType = "ebook" | "texto" | "link" | "youtube" | "websearch";
@@ -99,16 +117,6 @@ async function hasPngTransparency(file: File): Promise<boolean> {
   }
 }
 
-function normalizeForMatch(str: string): string {
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .replace(/[_-]+/g, " ")
-    .replace(/\.[a-z0-9]+$/, "")
-    .trim();
-}
-
 type WizardState = {
   // account
   accountName: string;
@@ -156,8 +164,12 @@ type WizardState = {
   deletedTemas: boolean[];
   selectedForVideo: number[];
   audioPaths: (string | null)[];
+  audioDurationByTema: (number | null)[];
   audioUploading: boolean;
   audioError: string | null;
+  // One entry per image segment of that tema's video; a URL means "use this own
+  // photo in this slot", null means "fill this slot automatically with stock".
+  imageAssignmentsByTema: (string | null)[][];
 
   // estilo
   selectedStyle: StyleName;
@@ -195,8 +207,10 @@ type WizardContextValue = WizardState & {
   addOwnImages: (files: FileList) => Promise<void>;
   removeOwnImage: (idx: number) => void;
   sourceLabel: () => string | null;
-  matchedOwnImageIndices: () => Set<number>;
-  matchedOwnImageForRoteiro: (idx: number) => OwnImage | undefined;
+  assignedOwnImageUrls: () => Set<string>;
+  neededSegmentsForTema: (idx: number) => number;
+  segmentTextsForTema: (idx: number) => string[];
+  setImageAssignment: (temaIdx: number, segmentIdx: number, url: string | null) => void;
 
   setDuration: (d: Duration) => void;
   setQty: (v: number) => void;
@@ -303,8 +317,10 @@ export function WizardProvider({
   const [deletedTemas, setDeletedTemas] = useState<boolean[]>([]);
   const [selectedForVideo, setSelectedForVideo] = useState<number[]>([]);
   const [audioPaths, setAudioPaths] = useState<(string | null)[]>([]);
+  const [audioDurationByTema, setAudioDurationByTema] = useState<(number | null)[]>([]);
   const [audioUploading, setAudioUploading] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [imageAssignmentsByTema, setImageAssignmentsByTema] = useState<(string | null)[][]>([]);
 
   const [selectedStyle, setSelectedStyle] = useState<StyleName>("Minimalista");
   const [captionColor, setCaptionColor] = useState<CaptionColor>("auto");
@@ -411,27 +427,41 @@ export function WizardProvider({
     return websearch.trim() || null;
   }, [sourceType, ebookFileName, texto, link, youtube, websearch]);
 
-  const matchedOwnImageIndices = useCallback((): Set<number> => {
-    const roteiroText = roteiros.map((r) => normalizeForMatch(r.text)).join(" ");
-    const set = new Set<number>();
-    ownImages.forEach((img, idx) => {
-      const baseName = normalizeForMatch(img.name);
-      if (baseName.length > 2 && roteiroText.includes(baseName)) set.add(idx);
-    });
+  const assignedOwnImageUrls = useCallback((): Set<string> => {
+    const set = new Set<string>();
+    imageAssignmentsByTema.forEach((slots) => slots.forEach((url) => url && set.add(url)));
     return set;
-  }, [ownImages, roteiros]);
+  }, [imageAssignmentsByTema]);
 
-  const matchedOwnImageForRoteiro = useCallback(
-    (idx: number): OwnImage | undefined => {
-      const text = normalizeForMatch(roteiros[idx]?.text ?? "");
-      if (!text) return undefined;
-      return ownImages.find((img) => {
-        const baseName = normalizeForMatch(img.name);
-        return baseName.length > 2 && text.includes(baseName);
-      });
-    },
-    [ownImages, roteiros],
+  /** Duration used to size this tema's video: the recorded narration's real
+   * length if one was captured, otherwise the same reading-time estimate the
+   * render falls back to when audio was skipped — keeps the picker's segment
+   * count in sync with what the render route will actually build. */
+  const durationForTema = useCallback(
+    (idx: number): number => audioDurationByTema[idx] ?? estimateReadingDurationSeconds(roteiros[idx]?.text ?? ""),
+    [audioDurationByTema, roteiros],
   );
+
+  const neededSegmentsForTema = useCallback(
+    (idx: number): number => computeSegmentCount(durationForTema(idx), sceneSecondsByTema[idx] ?? 3),
+    [durationForTema, sceneSecondsByTema],
+  );
+
+  const segmentTextsForTema = useCallback(
+    (idx: number): string[] => splitTextIntoChunks(roteiros[idx]?.text ?? "", neededSegmentsForTema(idx)),
+    [roteiros, neededSegmentsForTema],
+  );
+
+  const setImageAssignment = useCallback((temaIdx: number, segmentIdx: number, url: string | null) => {
+    setImageAssignmentsByTema((prev) => {
+      const next = prev.map((slots) => [...slots]);
+      while (!next[temaIdx]) next.push([]);
+      const slots = next[temaIdx];
+      while (slots.length <= segmentIdx) slots.push(null);
+      slots[segmentIdx] = url;
+      return next;
+    });
+  }, []);
 
   const addOwnImages = useCallback(
     async (files: FileList) => {
@@ -560,9 +590,11 @@ export function WizardProvider({
     setDeletedTemas(new Array(n).fill(false));
     setSelectedForVideo([]);
     setAudioPaths(new Array(n).fill(null));
+    setAudioDurationByTema(new Array(n).fill(null));
     setSceneSecondsByTema(new Array(n).fill(3));
     setMusicMoodByTema(new Array(n).fill("auto"));
     setImageThemeByTema(new Array(n).fill("auto"));
+    setImageAssignmentsByTema(Array.from({ length: n }, () => []));
   }, []);
 
   const applyVideos = useCallback(
@@ -666,7 +698,10 @@ export function WizardProvider({
       setAudioUploading(true);
       setAudioError(null);
       try {
-        const supabase = createClient();
+        const [supabase, durationSeconds] = await Promise.all([
+          Promise.resolve(createClient()),
+          readAudioDuration(file),
+        ]);
         const path = `${userId}/${idx}.${ext}`;
         const { error } = await supabase.storage
           .from("postime-audio")
@@ -678,6 +713,11 @@ export function WizardProvider({
         setAudioPaths((prev) => {
           const next = [...prev];
           next[idx] = path;
+          return next;
+        });
+        setAudioDurationByTema((prev) => {
+          const next = [...prev];
+          next[idx] = durationSeconds;
           return next;
         });
         setSavedTemas((prev) => prev.map((v, i) => (i === idx ? true : v)));
@@ -721,6 +761,7 @@ export function WizardProvider({
     // somewhere visible instead of a hidden tema.
     setDeletedTemas((prev) => prev.map((v, i) => (i === idx ? false : v)));
     setAudioPaths((prev) => prev.map((v, i) => (i === idx ? null : v)));
+    setAudioDurationByTema((prev) => prev.map((v, i) => (i === idx ? null : v)));
     setSelectedForVideo((prev) => prev.filter((i) => i !== idx));
     setScriptIndex(idx);
   }, []);
@@ -782,12 +823,15 @@ export function WizardProvider({
     setBuildingVideos(true);
     setBuildError(null);
     try {
-      const ownMatches = new Map<number, OwnImage>();
+      // Segment 0 (the cover / Download thumbnail) uses whatever the user assigned
+      // there in the "Fotos por vídeo" picker; only temas left on "Automático" for
+      // that slot need a stock search here — same batch call as before.
+      const ownCovers = new Map<number, string>();
       indices.forEach((i) => {
-        const match = matchedOwnImageForRoteiro(i);
-        if (match) ownMatches.set(i, match);
+        const cover = imageAssignmentsByTema[i]?.[0];
+        if (cover) ownCovers.set(i, cover);
       });
-      const unmatchedIndices = indices.filter((i) => !ownMatches.has(i));
+      const unmatchedIndices = indices.filter((i) => !ownCovers.has(i));
 
       let fetchedImages: ({ url: string; photographer: string } | null)[] = [];
       if (unmatchedIndices.length > 0) {
@@ -811,7 +855,7 @@ export function WizardProvider({
         const img = fetchedImages[pos];
         if (img) imageByIndex.set(i, img);
       });
-      ownMatches.forEach((img, i) => imageByIndex.set(i, { url: img.url, photographer: "Sua foto" }));
+      ownCovers.forEach((url, i) => imageByIndex.set(i, { url, photographer: "Sua foto" }));
 
       let dailyLimitHit = false;
       setBuildProgress({ completed: 0, total: indices.length });
@@ -839,6 +883,7 @@ export function WizardProvider({
               body: JSON.stringify({
                 audioPath,
                 imageUrl: image.url,
+                ownImageUrls: imageAssignmentsByTema[i] ?? [],
                 text: roteiros[i]?.text ?? "",
                 style: selectedStyle,
                 mood: (musicMoodByTema[i] ?? "auto") === "auto" ? roteiros[i]?.mood : musicMoodByTema[i],
@@ -911,7 +956,7 @@ export function WizardProvider({
     applyVideos,
     roteiros,
     audioPaths,
-    matchedOwnImageForRoteiro,
+    imageAssignmentsByTema,
     watermark,
     watermarkPosition,
   ]);
@@ -980,8 +1025,10 @@ export function WizardProvider({
       deletedTemas,
       selectedForVideo,
       audioPaths,
+      audioDurationByTema,
       audioUploading,
       audioError,
+      imageAssignmentsByTema,
       selectedStyle,
       sceneSecondsByTema,
       musicMoodByTema,
@@ -1013,8 +1060,10 @@ export function WizardProvider({
       addOwnImages,
       removeOwnImage,
       sourceLabel,
-      matchedOwnImageIndices,
-      matchedOwnImageForRoteiro,
+      assignedOwnImageUrls,
+      neededSegmentsForTema,
+      segmentTextsForTema,
+      setImageAssignment,
       setDuration,
       setQty,
       qtyMax,
@@ -1084,8 +1133,10 @@ export function WizardProvider({
       deletedTemas,
       selectedForVideo,
       audioPaths,
+      audioDurationByTema,
       audioUploading,
       audioError,
+      imageAssignmentsByTema,
       selectedStyle,
       sceneSecondsByTema,
       musicMoodByTema,
@@ -1111,8 +1162,10 @@ export function WizardProvider({
       addOwnImages,
       removeOwnImage,
       sourceLabel,
-      matchedOwnImageIndices,
-      matchedOwnImageForRoteiro,
+      assignedOwnImageUrls,
+      neededSegmentsForTema,
+      segmentTextsForTema,
+      setImageAssignment,
       setDuration,
       setQty,
       qtyMax,
