@@ -131,7 +131,7 @@ function CueListEditor({
   label: string;
   cues: TextOverlayCue[];
   onAdd: () => void;
-  onUpdate: (cueId: string, patch: Partial<Pick<TextOverlayCue, "text" | "start">>) => void;
+  onUpdate: (cueId: string, patch: Partial<Pick<TextOverlayCue, "text" | "start" | "end">>) => void;
   onRemove: (cueId: string) => void;
 }) {
   return (
@@ -160,11 +160,23 @@ function CueListEditor({
             className="flex-1 !py-2 !text-[12.5px]"
           />
           <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[10.5px] text-[var(--text-3)]">de</span>
             <input
               type="number"
               min={0}
               value={cue.start}
-              onChange={(e) => onUpdate(cue.id, { start: Math.max(0, Number(e.target.value) || 0) })}
+              onChange={(e) => {
+                const start = Math.max(0, Number(e.target.value) || 0);
+                onUpdate(cue.id, { start, end: Math.max(cue.end, start + 0.5) });
+              }}
+              className="w-14 bg-[var(--bg-1)] border-[0.5px] border-[var(--line)] rounded-[7px] text-[11.5px] text-[var(--text-1)] px-2 py-1.5 outline-none hover:border-[var(--line-strong)] focus:border-[var(--gold)]"
+            />
+            <span className="text-[10.5px] text-[var(--text-3)]">até</span>
+            <input
+              type="number"
+              min={cue.start + 0.5}
+              value={cue.end}
+              onChange={(e) => onUpdate(cue.id, { end: Math.max(cue.start + 0.5, Number(e.target.value) || cue.start + 0.5) })}
               className="w-14 bg-[var(--bg-1)] border-[0.5px] border-[var(--line)] rounded-[7px] text-[11.5px] text-[var(--text-1)] px-2 py-1.5 outline-none hover:border-[var(--line-strong)] focus:border-[var(--gold)]"
             />
             <span className="text-[10.5px] text-[var(--text-3)]">s</span>
@@ -602,7 +614,7 @@ export default function EstiloPage() {
           Título
           <HelpTip
             label="Como funciona o título"
-            text="Um texto no topo do vídeo, opcional — pode adicionar quantos quiser e escolher em que segundo cada um aparece (fica uns segundos na tela e some). Adicione os títulos de cada vídeo na lista de temas logo abaixo — aqui você só ajusta a aparência, que vale para todos."
+            text="Um texto no topo do vídeo, opcional — pode adicionar quantos quiser, cada um com seu próprio início e fim (com fade suave entrando e saindo). Adicione os títulos de cada vídeo na lista de temas logo abaixo — aqui você só ajusta a aparência, que vale para todos."
           />
         </FieldLabel>
         <OverlayStyleControls
@@ -703,7 +715,7 @@ export default function EstiloPage() {
                     Título e subtítulo deste vídeo
                     <HelpTip
                       label="Como funciona título e subtítulo"
-                      text="Textos opcionais que aparecem no topo do vídeo em segundos específicos (você escolhe o segundo de cada um). A aparência (cor, fonte, tamanho...) é ajustada lá em cima, em 'Título' e 'Subtítulo' — aqui você só define o texto e quando cada um aparece, vídeo por vídeo."
+                      text="Textos opcionais que aparecem no topo do vídeo — você define de qual até qual segundo cada um fica na tela, com fade suave entrando e saindo nas bordas desse intervalo. A aparência (cor, fonte, tamanho...) é ajustada lá em cima, em 'Título' e 'Subtítulo' — aqui você só define o texto e o intervalo de cada um, vídeo por vídeo."
                     />
                   </span>
                   <CueListEditor

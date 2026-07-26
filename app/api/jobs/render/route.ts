@@ -22,9 +22,10 @@ const ALLOWED_TEXT_ALIGNS = ["left", "center", "right"] as const;
 const MAX_OVERLAY_CUES = 12;
 
 /** Sanitizes a raw título/subtítulo cue array from the client: keeps only
- * well-formed {text, start} entries, trims/caps text length, clamps start to
- * a sane non-negative number, and bounds the list length. */
-function parseOverlayCues(raw: unknown): { text: string; start: number }[] {
+ * well-formed {text, start, end} entries, trims/caps text length, clamps
+ * start/end to sane non-negative numbers with end strictly after start, and
+ * bounds the list length. */
+function parseOverlayCues(raw: unknown): { text: string; start: number; end: number }[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((v) => {
@@ -32,9 +33,11 @@ function parseOverlayCues(raw: unknown): { text: string; start: number }[] {
       const text = typeof (v as Record<string, unknown>).text === "string" ? (v as { text: string }).text.trim().slice(0, 200) : "";
       const startRaw = (v as Record<string, unknown>).start;
       const start = typeof startRaw === "number" && Number.isFinite(startRaw) ? Math.max(0, startRaw) : 0;
-      return text ? { text, start } : null;
+      const endRaw = (v as Record<string, unknown>).end;
+      const end = typeof endRaw === "number" && Number.isFinite(endRaw) ? Math.max(start + 0.1, endRaw) : start + 4;
+      return text ? { text, start, end } : null;
     })
-    .filter((v): v is { text: string; start: number } => v !== null)
+    .filter((v): v is { text: string; start: number; end: number } => v !== null)
     .slice(0, MAX_OVERLAY_CUES);
 }
 

@@ -104,9 +104,9 @@ const TITLE_TOP_MARGIN = 90;
 const TITLE_SUBTITLE_GAP = 90;
 const LETTERBOX_HEIGHT = 150;
 const OVERLAY_SIDE_MARGIN = 60;
-// How long a single título/subtítulo cue stays on screen once its start time
-// hits, unless the next cue in the same list starts sooner (then it's cut short).
-const OVERLAY_CUE_DISPLAY_SECONDS = 4;
+// Cap on the in/out fade so very short cues (end close to start) still fade
+// fully within their own window instead of the fade overshooting past the end.
+const OVERLAY_CUE_MAX_FADE_SECONDS = 0.3;
 
 const STYLE_CONFIGS: Record<string, StyleRenderConfig> = {
   Minimalista: {
@@ -361,11 +361,11 @@ async function buildCaptionChain(opts: {
  * A list of timed text overlay cues (title or subtitle) — unlike captions,
  * cues aren't synced to narration and have no background panel, just
  * positioned text with a shared alignment/font/size/color/shadow. Each cue is
- * visible for `OVERLAY_CUE_DISPLAY_SECONDS` starting at its own `start` time,
- * cut short if the next cue starts before that window ends.
+ * visible from its own `start` to `end` second, fading in/out at the edges
+ * of that window.
  */
 async function buildOverlayCuesChain(opts: {
-  cues: { text: string; start: number }[];
+  cues: { text: string; start: number; end: number }[];
   duration: number;
   workDir: string;
   inLabel: string;
@@ -392,22 +392,20 @@ async function buildOverlayCuesChain(opts: {
         ? `w-text_w-${OVERLAY_SIDE_MARGIN}`
         : `(w-text_w)/2`;
 
-  const sorted = [...opts.cues].sort((a, b) => a.start - b.start);
   const lines: string[] = [];
   let cur = opts.inLabel;
 
-  for (let i = 0; i < sorted.length; i++) {
-    const cue = sorted[i];
-    const start = Math.min(cue.start, opts.duration);
-    const nextStart = i + 1 < sorted.length ? sorted[i + 1].start : opts.duration;
-    const end = Math.min(start + OVERLAY_CUE_DISPLAY_SECONDS, nextStart, opts.duration);
+  for (let i = 0; i < opts.cues.length; i++) {
+    const cue = opts.cues[i];
+    const start = Math.min(Math.max(0, cue.start), opts.duration);
+    const end = Math.min(Math.max(cue.end, start + 0.02), opts.duration);
     if (end - start < 0.02) continue;
 
     const displayText = wrapCaptionText(cue.text, maxCharsPerLine);
     const txtPath = path.join(opts.workDir, `${opts.idPrefix}_${i}.txt`);
     await writeFile(txtPath, displayText, "utf8");
     const txtEsc = escapeFilterPath(txtPath);
-    const fade = Math.min(0.3, (end - start) / 3).toFixed(3);
+    const fade = Math.min(OVERLAY_CUE_MAX_FADE_SECONDS, (end - start) / 3).toFixed(3);
     const startStr = start.toFixed(3);
     const endStr = end.toFixed(3);
 
@@ -467,13 +465,13 @@ export async function renderKenBurnsVideo(opts: {
   captionShadow?: boolean;
   captionBackground?: string;
   captionPositionY?: number;
-  titleCues?: { text: string; start: number }[];
+  titleCues?: { text: string; start: number; end: number }[];
   titleAlign?: string;
   titleColor?: string;
   titleSize?: string;
   titleFont?: string;
   titleShadow?: boolean;
-  subtitleCues?: { text: string; start: number }[];
+  subtitleCues?: { text: string; start: number; end: number }[];
   subtitleAlign?: string;
   subtitleColor?: string;
   subtitleSize?: string;

@@ -59,10 +59,11 @@ export type CaptionSize = "small" | "medium" | "large";
 export type CaptionFont = "poppins" | "anton" | "archivoblack";
 export type WatermarkPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export type TextAlign = "left" | "center" | "right";
-/** One título/subtítulo occurrence: shows `text` starting at `start` seconds
- * into the video for a few seconds. A tema can have zero, one, or several —
- * entirely optional, unlike the always-on-if-set single overlay this replaced. */
-export type TextOverlayCue = { id: string; text: string; start: number };
+/** One título/subtítulo occurrence: shows `text` from `start` to `end` seconds
+ * into the video, fading in/out at the edges of that window. A tema can have
+ * zero, one, or several — entirely optional, unlike the always-on-if-set
+ * single overlay this replaced. */
+export type TextOverlayCue = { id: string; text: string; start: number; end: number };
 
 export type OwnImage = { name: string; url: string; path: string };
 export type Roteiro = { meta: string; text: string; mood?: MusicMood; imageQuery?: string };
@@ -238,10 +239,10 @@ type WizardContextValue = WizardState & {
   segmentTextsForTema: (idx: number) => string[];
   setImageAssignment: (temaIdx: number, segmentIdx: number, url: string | null) => void;
   addTitleCue: (temaIdx: number) => void;
-  updateTitleCue: (temaIdx: number, cueId: string, patch: Partial<Pick<TextOverlayCue, "text" | "start">>) => void;
+  updateTitleCue: (temaIdx: number, cueId: string, patch: Partial<Pick<TextOverlayCue, "text" | "start" | "end">>) => void;
   removeTitleCue: (temaIdx: number, cueId: string) => void;
   addSubtitleCue: (temaIdx: number) => void;
-  updateSubtitleCue: (temaIdx: number, cueId: string, patch: Partial<Pick<TextOverlayCue, "text" | "start">>) => void;
+  updateSubtitleCue: (temaIdx: number, cueId: string, patch: Partial<Pick<TextOverlayCue, "text" | "start" | "end">>) => void;
   removeSubtitleCue: (temaIdx: number, cueId: string) => void;
 
   setDuration: (d: Duration) => void;
@@ -529,11 +530,11 @@ export function WizardProvider({
       setLists((prev) => {
         const next = prev.map((cues) => [...cues]);
         while (next.length <= temaIdx) next.push([]);
-        next[temaIdx].push({ id: crypto.randomUUID(), text: "", start: 0 });
+        next[temaIdx].push({ id: crypto.randomUUID(), text: "", start: 0, end: 4 });
         return next;
       });
     };
-    const update = (temaIdx: number, cueId: string, patch: Partial<Pick<TextOverlayCue, "text" | "start">>) => {
+    const update = (temaIdx: number, cueId: string, patch: Partial<Pick<TextOverlayCue, "text" | "start" | "end">>) => {
       setLists((prev) =>
         prev.map((cues, i) => (i === temaIdx ? cues.map((c) => (c.id === cueId ? { ...c, ...patch } : c)) : cues)),
       );
@@ -989,7 +990,7 @@ export function WizardProvider({
                 captionPositionY: captionPositionY ?? undefined,
                 titleCues: (titleCuesByTema[i] ?? [])
                   .filter((c) => c.text.trim())
-                  .map((c) => ({ text: c.text.trim(), start: c.start })),
+                  .map((c) => ({ text: c.text.trim(), start: c.start, end: c.end })),
                 titleAlign,
                 titleColor,
                 titleSize,
@@ -997,7 +998,7 @@ export function WizardProvider({
                 titleShadow,
                 subtitleCues: (subtitleCuesByTema[i] ?? [])
                   .filter((c) => c.text.trim())
-                  .map((c) => ({ text: c.text.trim(), start: c.start })),
+                  .map((c) => ({ text: c.text.trim(), start: c.start, end: c.end })),
                 subtitleAlign,
                 subtitleColor,
                 subtitleSize,
