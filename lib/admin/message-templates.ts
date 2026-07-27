@@ -1,7 +1,18 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email";
 
-export type MessageTemplateKey = "welcome" | "limit_reached" | "trial_ending";
+export const MESSAGE_TEMPLATE_KEYS = [
+  "welcome",
+  "limit_reached",
+  "trial_ending",
+  "free_ending",
+  "subscription_activated",
+  "subscription_late",
+  "subscription_canceled",
+  "payment_unmatched",
+] as const;
+
+export type MessageTemplateKey = (typeof MESSAGE_TEMPLATE_KEYS)[number];
 
 /** Sends the current (admin-editable) content for a template key. Best-effort — a
  * failure here must never break the signup/generation/cron flow that triggered it. */

@@ -8,6 +8,11 @@ const TEMPLATE_LABELS: Record<string, string> = {
   welcome: "Boas-vindas (no cadastro)",
   limit_reached: "Limite diário atingido",
   trial_ending: "Trial acabando",
+  free_ending: "Modo grátis acabando",
+  subscription_activated: "Assinatura ativada",
+  subscription_late: "Pagamento atrasado",
+  subscription_canceled: "Assinatura cancelada",
+  payment_unmatched: "Pagamento sem conta correspondente",
 };
 
 function TemplateCard({ template, onSaved }: { template: Template; onSaved: () => void }) {

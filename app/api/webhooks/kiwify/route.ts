@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendOwnerAlert } from "@/lib/alert-email";
+import { sendTemplatedMessage } from "@/lib/admin/message-templates";
 
 export const runtime = "nodejs";
 
@@ -131,9 +132,13 @@ export async function POST(request: Request) {
   if (!user) {
     console.warn(`[/api/webhooks/kiwify] no POSTime account for ${email} — payment made with a different email?`);
     // Kept for self-service reconciliation — see app/api/account/link-payment.
+    // Emails the payer directly too (not just the internal owner alert) — without
+    // this they'd have no idea anything went wrong unless they happened to open the
+    // upgrade modal and notice the reconciliation link themselves.
     await Promise.all([
       logRow(false),
       supabase.from("kiwify_unmatched_events").insert({ email, status, kiwify_order_id: orderId, raw_payload: body }),
+      sendTemplatedMessage("payment_unmatched", email),
       sendOwnerAlert(
         "POSTime: pagamento Kiwify sem conta correspondente",
         `Um pagamento aprovado na Kiwify (pedido ${orderId ?? "sem id"}) usou o e-mail ${email}, que não bate com nenhuma conta do POSTime.\n\nO cliente pode resolver sozinho em "Já paguei mas minha conta não foi liberada" (no modal de assinatura), informando esse mesmo e-mail.`,
@@ -142,6 +147,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, ignored: "no_matching_account" });
   }
 
+  // Fetched before the upsert so the email below only fires on an actual status
+  // transition — otherwise every renewal ping (still "active") or retry of the same
+  // event would re-send "assinatura ativada" every time.
+  const { data: existingSub } = await supabase
+    .from("subscriptions")
+    .select("status")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const previousStatus = existingSub?.status ?? null;
+
   const { error: upsertErr } = await supabase
     .from("subscriptions")
     .upsert({ user_id: user.id, status, kiwify_order_id: orderId });
@@ -149,6 +164,12 @@ export async function POST(request: Request) {
     console.error("[/api/webhooks/kiwify] subscription upsert failed:", upsertErr.message);
     await logRow(false);
     return NextResponse.json({ error: "upsert_failed" }, { status: 500 });
+  }
+
+  if (status !== previousStatus) {
+    const templateKey =
+      status === "active" ? "subscription_activated" : status === "late" ? "subscription_late" : "subscription_canceled";
+    await sendTemplatedMessage(templateKey, email);
   }
 
   await logRow(true);

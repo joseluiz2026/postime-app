@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminSession, getClientIp, logAdminAction } from "@/lib/admin/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { MESSAGE_TEMPLATE_KEYS } from "@/lib/admin/message-templates";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,7 @@ export async function PUT(request: Request) {
   const subject = String(body?.subject ?? "").trim();
   const messageBody = String(body?.body ?? "").trim();
 
-  if (!["welcome", "limit_reached", "trial_ending"].includes(key) || !subject || !messageBody) {
+  if (!(MESSAGE_TEMPLATE_KEYS as readonly string[]).includes(key) || !subject || !messageBody) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
 
