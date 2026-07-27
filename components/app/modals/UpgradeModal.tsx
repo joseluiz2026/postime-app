@@ -11,6 +11,7 @@ type ReconcileStatus = "idle" | "loading" | "success" | "not_found" | "error";
 export function UpgradeModal() {
   const wizard = useWizard();
   const open = wizard.modal.type === "upgrade";
+  const isProactive = wizard.modal.type === "upgrade" && wizard.modal.reason === "proactive";
   const [showReconcile, setShowReconcile] = useState(false);
   const [reconcileEmail, setReconcileEmail] = useState("");
   const [reconcileStatus, setReconcileStatus] = useState<ReconcileStatus>("idle");
@@ -50,8 +51,12 @@ export function UpgradeModal() {
         {wizard.accessPhase === "locked"
           ? `Seus ${TRIAL_DAYS + FREE_DAYS} dias grátis acabaram.`
           : wizard.accessPhase === "free"
-            ? "Você está no modo limitado (até 2 vídeos de 15s por dia) — isso passa do que esse modo permite."
-            : "Você atingiu o limite de hoje, ou tentou um recurso que exige assinatura."}{" "}
+            ? isProactive
+              ? "Você está no modo limitado (até 2 vídeos de 15s por dia)."
+              : "Você está no modo limitado (até 2 vídeos de 15s por dia) — isso passa do que esse modo permite."
+            : isProactive
+              ? "Assine agora e não se preocupe com limite nenhum, nem quando o teste grátis acabar."
+              : "Você atingiu o limite de hoje, ou tentou um recurso que exige assinatura."}{" "}
         Para continuar sem limite, é preciso de uma assinatura ativa — não existe outro plano gratuito.
       </p>
 

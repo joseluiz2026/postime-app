@@ -95,7 +95,10 @@ export type AccountModalType = "password" | "report" | "faq" | "support";
 
 type ModalState =
   | { type: null }
-  | { type: "upgrade" }
+  // reason "proactive" = opened from an always-visible CTA (account card,
+  // post-build banner), not because the user actually hit a limit — the modal
+  // copy reads differently so it doesn't imply a limit was hit when it wasn't.
+  | { type: "upgrade"; reason?: "proactive" }
   | { type: "eleven" }
   | { type: "account"; accountType: AccountModalType }
   | { type: "whatsapp" }
@@ -263,7 +266,7 @@ type WizardContextValue = WizardState & {
   setQty: (v: number) => void;
   qtyMax: () => number;
 
-  openUpgradeModal: () => void;
+  openUpgradeModal: (reason?: "proactive") => void;
 
   refreshUsage: () => Promise<void>;
   saveOwnKey: (provider: LlmProvider, apiKey: string) => Promise<boolean>;
@@ -708,9 +711,12 @@ export function WizardProvider({
     [qtyMax],
   );
 
-  const openUpgradeModal = useCallback(() => {
-    openModal({ type: "upgrade" });
-  }, [openModal]);
+  const openUpgradeModal = useCallback(
+    (reason?: "proactive") => {
+      openModal({ type: "upgrade", reason });
+    },
+    [openModal],
+  );
 
   const resetVideoTracking = useCallback((n: number) => {
     setScriptIndex(0);

@@ -114,7 +114,7 @@ export default function RoteirosPage() {
             <Icon name="lock" /> Seu acesso grátis acabou.{" "}
             <button
               className="text-[var(--gold)] underline-offset-2 hover:underline"
-              onClick={wizard.openUpgradeModal}
+              onClick={() => wizard.openUpgradeModal()}
             >
               Assine para continuar
             </button>

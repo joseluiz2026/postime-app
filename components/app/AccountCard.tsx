@@ -67,7 +67,7 @@ export function AccountCard() {
       {!wizard.isSubscribed && (
         <button
           type="button"
-          onClick={() => wizard.openUpgradeModal()}
+          onClick={() => wizard.openUpgradeModal("proactive")}
           className="flex items-center justify-center gap-1.5 w-full mb-3 py-2 rounded-lg text-[11.5px] font-semibold text-[#0B1220] bg-gradient-to-br from-[var(--gold)] to-[var(--teal)] border-none cursor-pointer transition-all hover:brightness-110"
         >
           <Icon name="crown" /> Assinar Pro e destravar tudo

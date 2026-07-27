@@ -1056,7 +1056,7 @@ export default function EstiloPage() {
               </p>
               <button
                 type="button"
-                onClick={() => wizard.openUpgradeModal()}
+                onClick={() => wizard.openUpgradeModal("proactive")}
                 className="shrink-0 text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-br from-[var(--gold)] to-[var(--teal)] text-[#0B1220] border-none cursor-pointer whitespace-nowrap"
               >
                 Assinar
