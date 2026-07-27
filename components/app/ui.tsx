@@ -71,9 +71,20 @@ export function Pill({
   );
 }
 
-export function FieldLabel({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
+export function FieldLabel({
+  children,
+  htmlFor,
+  className,
+}: {
+  children: ReactNode;
+  htmlFor?: string;
+  className?: string;
+}) {
   return (
-    <label htmlFor={htmlFor} className="block text-xs font-medium text-[var(--text-2)] mb-2">
+    <label
+      htmlFor={htmlFor}
+      className={`block text-xs font-medium text-[var(--text-2)] mb-2 ${className ?? ""}`}
+    >
       {children}
     </label>
   );

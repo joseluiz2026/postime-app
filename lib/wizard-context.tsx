@@ -104,25 +104,35 @@ type ModalState =
 
 /** Best-effort check that a PNG actually has transparent pixels — samples every
  * pixel's alpha channel via canvas, since the file extension alone doesn't tell
- * us whether the background was actually cut out. */
-async function hasPngTransparency(file: File): Promise<boolean> {
+ * us whether the background was actually cut out. Also reports the image's
+ * pixel dimensions so the caller can reject anything too small to survive the
+ * render's fixed 180px-wide watermark overlay without looking blurry. */
+async function inspectWatermarkPng(file: File): Promise<{ transparent: boolean; width: number; height: number } | null> {
   try {
     const bitmap = await createImageBitmap(file);
     const canvas = document.createElement("canvas");
     canvas.width = bitmap.width;
     canvas.height = bitmap.height;
     const ctx = canvas.getContext("2d");
-    if (!ctx) return true;
+    if (!ctx) return { transparent: true, width: bitmap.width, height: bitmap.height };
     ctx.drawImage(bitmap, 0, 0);
     const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let transparent = false;
     for (let i = 3; i < data.length; i += 4) {
-      if (data[i] < 255) return true;
+      if (data[i] < 255) {
+        transparent = true;
+        break;
+      }
     }
-    return false;
+    return { transparent, width: bitmap.width, height: bitmap.height };
   } catch {
-    return true;
+    return null;
   }
 }
+
+// Render always scales the watermark to this fixed width (see lib/render/ken-burns.ts) —
+// anything narrower than this would be upscaled and look blurry in the final video.
+const WATERMARK_MIN_DIMENSION_PX = 180;
 
 type WizardState = {
   // account
@@ -268,6 +278,7 @@ type WizardContextValue = WizardState & {
   skipAudio: (idx: number) => void;
   retryRecording: (idx: number) => void;
   retryVideo: (video: Video) => void;
+  deleteVideo: (video: Video) => void;
   deleteRoteiro: (idx: number) => void;
   toggleSelectedForVideo: (idx: number) => void;
 
@@ -619,9 +630,25 @@ export function WizardProvider({
       }
       setWatermarkUploading(true);
       try {
-        const transparent = await hasPngTransparency(file);
-        if (!transparent) {
-          setWatermarkError("O PNG precisa ter fundo transparente.");
+        const inspection = await inspectWatermarkPng(file);
+        if (!inspection) {
+          setWatermarkError("Não foi possível ler esse PNG. Tente outro arquivo.");
+          return;
+        }
+        // Not transparent doesn't block the upload anymore — a lot of real logos
+        // (exported from Canva, Word, a screenshot) fail this strict per-pixel
+        // check even when they look fine to the eye, and blocking outright made
+        // watermark upload feel broken for those users. It still renders (as a
+        // solid box behind the logo instead of a clean overlay), so warn instead.
+        let transparencyWarning: string | null = null;
+        if (!inspection.transparent) {
+          transparencyWarning =
+            "Esse PNG não tem fundo transparente de verdade — ele vai aparecer com um fundo sólido no vídeo. Pra um resultado limpo, exporte a logo com fundo transparente (ex: remove.bg).";
+        }
+        if (inspection.width < WATERMARK_MIN_DIMENSION_PX || inspection.height < WATERMARK_MIN_DIMENSION_PX) {
+          setWatermarkError(
+            `A imagem é muito pequena (${inspection.width}x${inspection.height}px). Envie pelo menos ${WATERMARK_MIN_DIMENSION_PX}x${WATERMARK_MIN_DIMENSION_PX}px.`,
+          );
           return;
         }
         const supabase = createClient();
@@ -636,7 +663,10 @@ export function WizardProvider({
         const { data: signed } = await supabase.storage
           .from("postime-images")
           .createSignedUrl(path, 60 * 60 * 24);
-        if (signed?.signedUrl) setWatermark({ url: signed.signedUrl, path });
+        if (signed?.signedUrl) {
+          setWatermark({ url: signed.signedUrl, path });
+          if (transparencyWarning) setWatermarkError(transparencyWarning);
+        }
       } catch {
         setWatermarkError("Falha de conexão. Tente novamente.");
       } finally {
@@ -657,6 +687,7 @@ export function WizardProvider({
       }
       return null;
     });
+    setWatermarkError(null);
   }, []);
 
   const setDuration = useCallback(
@@ -697,6 +728,61 @@ export function WizardProvider({
     setTitleCuesByTema(Array.from({ length: n }, () => []));
     setSubtitleCuesByTema(Array.from({ length: n }, () => []));
   }, []);
+
+  // Roteiros only lived in this React tree's memory until now — a refresh or a
+  // new session lost every tema that hadn't already turned into a video, which
+  // broke the "build one video at a time, come back later for the rest"
+  // workflow. draftLoaded gates the autosave effect below so the empty initial
+  // state (before this load resolves) never overwrites a real saved draft.
+  const draftLoaded = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/roteiros/draft");
+        if (!res.ok || cancelled) return;
+        const { draft } = await res.json();
+        if (!draft || !Array.isArray(draft.roteiros) || draft.roteiros.length === 0 || cancelled) return;
+        const n = draft.roteiros.length;
+        resetVideoTracking(n);
+        setRoteiros(draft.roteiros);
+        setUsedTemas(Array.isArray(draft.usedTemas) && draft.usedTemas.length === n ? draft.usedTemas : new Array(n).fill(false));
+        setFailedTemas(Array.isArray(draft.failedTemas) && draft.failedTemas.length === n ? draft.failedTemas : new Array(n).fill(false));
+        setAudioPaths(Array.isArray(draft.audioPaths) && draft.audioPaths.length === n ? draft.audioPaths : new Array(n).fill(null));
+        setAudioDurationByTema(
+          Array.isArray(draft.audioDurations) && draft.audioDurations.length === n
+            ? draft.audioDurations
+            : new Array(n).fill(null),
+        );
+      } catch {
+        // best-effort — an unrestored draft just means starting fresh, not a hard error
+      } finally {
+        draftLoaded.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!draftLoaded.current) return;
+    const timer = setTimeout(() => {
+      fetch("/api/roteiros/draft", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roteiros,
+          usedTemas,
+          failedTemas,
+          audioPaths,
+          audioDurations: audioDurationByTema,
+        }),
+      }).catch(() => {});
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [roteiros, usedTemas, failedTemas, audioPaths, audioDurationByTema]);
 
   const applyVideos = useCallback(
     (next: Omit<Video, "id">[], status: string) => {
@@ -886,6 +972,24 @@ export function WizardProvider({
     },
     [retryRecording],
   );
+
+  /**
+   * Pure delete, unlike retryVideo: removes the rendered file and the card from
+   * the list, but leaves the tema's recording/roteiro alone and doesn't route
+   * the user back into Gravação — un-marks it as "used" so it's simply free to
+   * pick again later on the Estilo tema list if they want another shot at it.
+   */
+  const deleteVideo = useCallback((video: Video) => {
+    if (video.videoPath) {
+      fetch("/api/jobs/render", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoPath: video.videoPath }),
+      }).catch(() => {});
+    }
+    setVideos((prev) => prev.filter((v) => v.id !== video.id));
+    setUsedTemas((prev) => prev.map((v, i) => (i === video.temaIndex ? false : v)));
+  }, []);
 
   /**
    * Marks a tema as deleted instead of splicing it out of the parallel arrays —
@@ -1238,6 +1342,7 @@ export function WizardProvider({
       skipAudio,
       retryRecording,
       retryVideo,
+      deleteVideo,
       deleteRoteiro,
       toggleSelectedForVideo,
       setSelectedStyle,
@@ -1375,6 +1480,7 @@ export function WizardProvider({
       skipAudio,
       retryRecording,
       retryVideo,
+      deleteVideo,
       deleteRoteiro,
       toggleSelectedForVideo,
       setSceneSecondsForTema,

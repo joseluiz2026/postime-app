@@ -447,6 +447,13 @@ function useSmoothBuildProgress(active: boolean, completed: number, total: numbe
   return pct;
 }
 
+function formatVideoDuration(seconds?: number): string {
+  if (!seconds) return "--:--";
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 export default function EstiloPage() {
   const wizard = useWizard();
   const router = useRouter();
@@ -460,6 +467,19 @@ export default function EstiloPage() {
     wizard.buildProgress?.completed ?? 0,
     wizard.buildProgress?.total ?? 0,
   );
+
+  async function handleShareVideo(video: (typeof wizard.videos)[number]) {
+    if (!video.videoUrl) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: video.title, url: video.videoUrl });
+      } catch {
+        // user cancelled the native share sheet — nothing to do
+      }
+    } else {
+      await navigator.clipboard.writeText(video.videoUrl);
+    }
+  }
 
   if (n !== prevN) {
     setPrevN(n);
@@ -504,8 +524,8 @@ export default function EstiloPage() {
         ))}
       </div>
 
-      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
-        <span className="block text-xs font-medium text-[var(--text-2)] mb-2">
+      <div className="mt-6 pt-6 border-t-2 border-[var(--line-strong)]">
+        <span className="block text-[15px] font-semibold text-[var(--text-1)] mb-2">
           Cor da legenda
           <HelpTip
             label="Como funciona o automático"
@@ -615,8 +635,8 @@ export default function EstiloPage() {
         </div>
       </div>
 
-      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
-        <FieldLabel>
+      <div className="mt-6 pt-6 border-t-2 border-[var(--line-strong)]">
+        <FieldLabel className="text-[15px] font-semibold text-[var(--text-1)]">
           Áudio
           <HelpTip
             label="Como funciona o volume"
@@ -669,8 +689,8 @@ export default function EstiloPage() {
         </div>
       </div>
 
-      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
-        <FieldLabel>
+      <div className="mt-6 pt-6 border-t-2 border-[var(--line-strong)]">
+        <FieldLabel className="text-[15px] font-semibold text-[var(--text-1)]">
           Título
           <HelpTip
             label="Como funciona o título"
@@ -691,8 +711,8 @@ export default function EstiloPage() {
         />
       </div>
 
-      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
-        <FieldLabel>Subtítulo</FieldLabel>
+      <div className="mt-6 pt-6 border-t-2 border-[var(--line-strong)]">
+        <FieldLabel className="text-[15px] font-semibold text-[var(--text-1)]">Subtítulo</FieldLabel>
         <OverlayStyleControls
           align={wizard.subtitleAlign}
           onAlign={wizard.setSubtitleAlign}
@@ -708,7 +728,7 @@ export default function EstiloPage() {
       </div>
 
       {n > 0 && (
-        <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
+        <div className="mt-6 pt-6 border-t-2 border-[var(--line-strong)]">
           <span className="block text-xs font-medium text-[var(--text-2)] mb-3">
             Cena, música e imagens por vídeo
             <HelpTip
@@ -799,8 +819,8 @@ export default function EstiloPage() {
         </div>
       )}
 
-      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
-        <FieldLabel>
+      <div className="mt-6 pt-6 border-t-2 border-[var(--line-strong)]">
+        <FieldLabel className="text-[15px] font-semibold text-[var(--text-1)]">
           Imagens próprias (opcional)
           <HelpTip
             label="Como encaixar suas fotos nos vídeos"
@@ -863,8 +883,8 @@ export default function EstiloPage() {
       </div>
 
       {wizard.ownImages.length > 0 && n > 0 && (
-        <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
-          <FieldLabel>
+        <div className="mt-6 pt-6 border-t-2 border-[var(--line-strong)]">
+          <FieldLabel className="text-[15px] font-semibold text-[var(--text-1)]">
             Fotos por vídeo
             <HelpTip
               label="Como funciona"
@@ -885,23 +905,24 @@ export default function EstiloPage() {
         </div>
       )}
 
-      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
-        <FieldLabel>
+      <div className="mt-6 pt-6 border-t-2 border-[var(--line-strong)]">
+        <FieldLabel className="text-[15px] font-semibold text-[var(--text-1)]">
           Marca d&apos;água / assinatura (opcional)
           <HelpTip
             label="Como funciona a marca d'água"
-            text="Envie uma logo em PNG com fundo transparente para aparecer em todos os vídeos gerados, no canto que você escolher."
+            text="Envie uma logo em PNG com fundo transparente para aparecer em todos os vídeos gerados, no canto que você escolher. No vídeo final ela sempre sai com 180px de largura (altura proporcional) — envie em pelo menos 360x360px para não ficar borrada."
           />
         </FieldLabel>
         <p className="text-[13px] text-[var(--text-2)] mb-4 leading-relaxed">
           Sua logo aparece em todos os vídeos desta montagem. <strong>Aviso:</strong> precisa ser um PNG com fundo
-          transparente.
+          transparente. Tamanho recomendado: quadrada, a partir de 360x360px (ela sai com 180px de largura no vídeo
+          final).
         </p>
         {!wizard.watermark ? (
           <Dropzone
             icon="photo"
             title={wizard.watermarkUploading ? "Enviando..." : "Clique para escolher um PNG transparente"}
-            subtitle="PNG com fundo transparente · até 5MB"
+            subtitle="PNG com fundo transparente · mín. 360x360px · até 5MB"
             accept=".png,image/png"
             onFiles={(files) => wizard.uploadWatermark(files[0])}
           />
@@ -989,7 +1010,10 @@ export default function EstiloPage() {
             }
             const result = await wizard.confirmBuild();
             if (!result.ok) return;
-            router.push("/app/download");
+            // Stays on Estilo instead of jumping to Download — the finished
+            // video shows up right below (see the "Vídeos prontos" list), so
+            // the user can keep picking the next tema and build one at a time
+            // without losing their place. Download is still one click away.
             if (result.dailyLimitHit) {
               // A quota problem isn't a recording problem — the buildFailed
               // ("Regravar") modal would be misleading here, since re-recording
@@ -1004,6 +1028,102 @@ export default function EstiloPage() {
           {wizard.buildingVideos ? "Montando vídeo..." : "Confirmar e montar vídeo"}
         </Btn>
       </div>
+
+      {wizard.videos.length > 0 && (
+        <div className="mt-6 pt-6 border-t-2 border-[var(--line-strong)]">
+          <div className="flex items-center justify-between mb-3">
+            <span className="block text-[15px] font-semibold text-[var(--text-1)]">
+              Vídeos prontos ({wizard.videos.length})
+            </span>
+            <button
+              type="button"
+              onClick={() => router.push("/app/download")}
+              className="text-[12px] text-[var(--teal)] bg-transparent border-none cursor-pointer underline p-0"
+            >
+              Ver todos no Download
+            </button>
+          </div>
+          <p className="text-[12.5px] text-[var(--text-2)] mb-4 leading-relaxed">
+            Ficam disponíveis por 6 horas. Baixe, compartilhe ou exclua quando quiser — os que sobrarem some sozinhos
+            depois desse prazo.
+          </p>
+          <div className="grid grid-cols-4 gap-3 max-[720px]:grid-cols-3 max-[480px]:grid-cols-2">
+            {[...wizard.videos]
+              .sort((a, b) => b.temaIndex - a.temaIndex)
+              .map((video) => (
+                <div
+                  key={video.id}
+                  className="border-[0.5px] border-[var(--line)] rounded-xl overflow-hidden transition-all hover:border-[var(--line-strong)]"
+                >
+                  {video.videoUrl ? (
+                    <a
+                      href={video.videoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Abrir ${video.title}`}
+                      className="aspect-[9/16] bg-[var(--bg-2)] bg-cover bg-center flex items-center justify-center text-[var(--text-3)] text-[18px] relative cursor-pointer"
+                      style={video.imageUrl ? { backgroundImage: `url(${video.imageUrl})` } : undefined}
+                    >
+                      {!video.imageUrl && <Icon name="player-play" />}
+                      <span className="absolute bottom-1.5 right-1.5 font-mono text-[9px] bg-black/55 px-1.5 py-0.5 rounded-md text-[var(--text-1)]">
+                        {formatVideoDuration(video.durationSeconds)}
+                      </span>
+                    </a>
+                  ) : (
+                    <div
+                      className="aspect-[9/16] bg-[var(--bg-2)] bg-cover bg-center flex items-center justify-center relative"
+                      style={video.imageUrl ? { backgroundImage: `url(${video.imageUrl})` } : undefined}
+                    >
+                      <span className="flex flex-col items-center gap-1 text-[var(--gold)] bg-black/55 px-2 py-1.5 rounded-lg">
+                        <Icon name="alert-triangle" />
+                        <span className="text-[10px] font-medium">não entregue</span>
+                      </span>
+                    </div>
+                  )}
+                  <div className="p-2">
+                    <div className="text-[11px] text-[var(--text-1)] mb-2 truncate" title={video.title}>
+                      {video.title}
+                    </div>
+                    <div className="flex gap-1">
+                      {video.videoUrl && (
+                        <>
+                          <a
+                            href={video.videoUrl}
+                            download={`${video.title}.mp4`}
+                            aria-label="Baixar"
+                            className="flex-1 min-w-0 px-1 py-1.5 text-center rounded-[8px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_32%,transparent)] border-[color-mix(in_srgb,var(--gold)_55%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_42%,transparent)] cursor-pointer"
+                          >
+                            <Icon name="download" />
+                          </a>
+                          <button
+                            type="button"
+                            aria-label="Compartilhar"
+                            onClick={() => handleShareVideo(video)}
+                            className="flex-1 min-w-0 px-1 py-1.5 text-center rounded-[8px] border-[0.5px] border-[var(--line)] text-[var(--text-2)] bg-transparent transition-all hover:border-[var(--gold)] hover:text-[var(--gold)] cursor-pointer"
+                          >
+                            <Icon name="share" />
+                          </button>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        aria-label="Excluir"
+                        onClick={() => {
+                          if (window.confirm("Excluir este vídeo? Essa ação não pode ser desfeita.")) {
+                            wizard.deleteVideo(video);
+                          }
+                        }}
+                        className="flex-1 min-w-0 px-1 py-1.5 text-center rounded-[8px] border-[0.5px] border-[var(--line)] text-[var(--text-3)] bg-transparent transition-all hover:border-[#ef4444] hover:text-[#ef4444] cursor-pointer"
+                      >
+                        <Icon name="trash" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
