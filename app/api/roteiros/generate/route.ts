@@ -82,48 +82,62 @@ export async function POST(request: Request) {
     }
   }
 
-  // Pool key (trial/free phase): everyone shares POSTime's own Groq key, which
-  // free-tier rate limits (see console.groq.com/docs/rate-limits) can exhaust under
-  // concurrent signups. Fall back to the Gemini key already provisioned from before
-  // the Groq switch, rather than surfacing a rate-limit error to the user.
-  const groqKey = process.env.GROQ_API_KEY;
-  const googleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  // Pool key (trial/free phase): everyone shares POSTime's own keys, and free-tier
+  // rate limits (see console.groq.com/docs/rate-limits) can exhaust a single key
+  // under concurrent signups. Two independent keys per provider (separate accounts,
+  // not just re-requesting — a rate limit is per-account) plus a second provider
+  // means one exhausted/expired/down key doesn't take generation down entirely.
+  // Tried in order; each hop is logged so fallback_events shows how often — and how
+  // deep into the chain — this actually fires.
   const freeModels = await getFreeTierModels();
-
-  if (groqKey) {
-    try {
-      const roteiros = await generateRoteiros({
-        provider: "groq",
-        apiKey: groqKey,
-        modelOverride: freeModels.primary,
-        ...genArgs,
-      });
-      return NextResponse.json({ roteiros, mode: accessPhase });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "";
-      console.error("[/api/roteiros/generate] Groq pool key failed, falling back to Gemini:", message);
-      await logFallbackEvent("groq", googleKey ? "google" : null, message);
-    }
+  const attempts: { provider: LlmProvider; apiKey: string; model: string; label: string }[] = [];
+  if (process.env.GROQ_API_KEY) {
+    attempts.push({ provider: "groq", apiKey: process.env.GROQ_API_KEY, model: freeModels.primary, label: "groq-1" });
+  }
+  if (process.env.GROQ_API_KEY_2) {
+    attempts.push({ provider: "groq", apiKey: process.env.GROQ_API_KEY_2, model: freeModels.primary, label: "groq-2" });
+  }
+  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    attempts.push({
+      provider: "google",
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+      model: freeModels.fallback,
+      label: "google-1",
+    });
+  }
+  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY_2) {
+    attempts.push({
+      provider: "google",
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY_2,
+      model: freeModels.fallback,
+      label: "google-2",
+    });
   }
 
-  if (googleKey) {
-    try {
-      const roteiros = await generateRoteiros({
-        provider: "google",
-        apiKey: googleKey,
-        modelOverride: freeModels.fallback,
-        ...genArgs,
-      });
-      return NextResponse.json({ roteiros, mode: accessPhase });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "";
-      console.error("[/api/roteiros/generate] Gemini fallback also failed:", message);
-      await logFallbackEvent("google", null, message);
-    }
-  }
-
-  if (!groqKey && !googleKey) {
+  if (attempts.length === 0) {
     return NextResponse.json({ error: "server_not_configured" }, { status: 500 });
   }
+
+  for (let i = 0; i < attempts.length; i++) {
+    const attempt = attempts[i];
+    try {
+      const roteiros = await generateRoteiros({
+        provider: attempt.provider,
+        apiKey: attempt.apiKey,
+        modelOverride: attempt.model,
+        ...genArgs,
+      });
+      return NextResponse.json({ roteiros, mode: accessPhase });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      const nextLabel = attempts[i + 1]?.label ?? null;
+      console.error(
+        `[/api/roteiros/generate] ${attempt.label} failed${nextLabel ? `, falling back to ${nextLabel}` : " — no keys left"}:`,
+        message,
+      );
+      await logFallbackEvent(attempt.label, nextLabel, message);
+    }
+  }
+
   return NextResponse.json({ error: "generation_failed" }, { status: 502 });
 }

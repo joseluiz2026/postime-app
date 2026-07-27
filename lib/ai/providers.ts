@@ -5,23 +5,17 @@
 // changing a link never requires touching more than this file.
 import type { LlmProvider } from "./generate-roteiros";
 
-export type ProviderCategory = "texto" | "imagem" | "video" | "voz";
+// Image/video generation categories were removed (2026-07-27) — POSTime sticks to
+// the Ken Burns render (photos + camera movement, ~zero AI cost) as the core
+// product instead of chasing paid-per-second AI video generation, which would
+// break the free tier's economics. See project memory if reconsidering this.
+export type ProviderCategory = "texto" | "voz";
 
 export const CATEGORY_META: Record<ProviderCategory, { label: string; icon: string; description: string }> = {
   texto: {
     label: "Texto",
     icon: "typography",
     description: "Gera os roteiros dos seus vídeos.",
-  },
-  imagem: {
-    label: "Imagem",
-    icon: "photo",
-    description: "Geração de imagens por IA para as cenas do vídeo.",
-  },
-  video: {
-    label: "Vídeo",
-    icon: "movie",
-    description: "Geração de vídeo por IA (além do modo Ken Burns gratuito).",
   },
   voz: {
     label: "Voz",
@@ -143,145 +137,6 @@ export const PROVIDERS: ProviderInfo[] = [
       "Clique em \"Create Key\", dê um nome e confirme.",
       "Copie a chave gerada.",
       "Volte ao POSTime e cole a chave em \"Conectar API\".",
-    ],
-  },
-
-  // ---- Imagem (roadmap — hoje o POSTime já busca fotos automaticamente via Pexels, sem BYOK) ----
-  {
-    id: "fal-image",
-    category: "imagem",
-    name: "Fal.ai (Flux)",
-    description: "Geração de imagens com o modelo Flux, via API unificada da Fal.ai.",
-    tiers: ["freeCredits", "paid"],
-    difficulty: "Fácil",
-    setupTime: "~4 min",
-    recommended: true,
-    implemented: false,
-    notes: "Ainda não disponível no POSTime — em breve, para gerar imagens de cena sob medida em vez de usar apenas bancos de fotos gratuitos.",
-    signupUrl: "https://fal.ai/",
-    apiKeyUrl: "https://fal.ai/dashboard/keys",
-    steps: [
-      "Acesse fal.ai e crie uma conta.",
-      "Abra o Dashboard e vá em \"Keys\".",
-      "Clique em \"Add key\" e copie o valor gerado.",
-      "Guarde a chave — no POSTime, ela poderá ser colada assim que este recurso for lançado.",
-    ],
-  },
-  {
-    id: "replicate",
-    category: "imagem",
-    name: "Replicate",
-    description: "Catálogo amplo de modelos de imagem hospedados (Flux, SDXL e outros).",
-    tiers: ["freeCredits", "paid"],
-    difficulty: "Média",
-    setupTime: "~5 min",
-    implemented: false,
-    notes: "Ainda não disponível no POSTime.",
-    signupUrl: "https://replicate.com/",
-    apiKeyUrl: "https://replicate.com/account/api-tokens",
-    steps: [
-      "Acesse replicate.com e crie uma conta.",
-      "Vá em Account settings → \"API tokens\".",
-      "Copie o token padrão ou crie um novo.",
-      "Guarde a chave para quando este recurso for lançado no POSTime.",
-    ],
-  },
-  {
-    id: "huggingface",
-    category: "imagem",
-    name: "Hugging Face",
-    description: "Inference API da Hugging Face, com diversos modelos de imagem abertos.",
-    tiers: ["free", "paid"],
-    difficulty: "Média",
-    setupTime: "~4 min",
-    implemented: false,
-    notes: "Ainda não disponível no POSTime.",
-    signupUrl: "https://huggingface.co/",
-    apiKeyUrl: "https://huggingface.co/settings/tokens",
-    steps: [
-      "Acesse huggingface.co e crie uma conta.",
-      "Vá em Settings → \"Access Tokens\".",
-      "Clique em \"Create new token\" com permissão de leitura.",
-      "Copie o token para quando este recurso for lançado no POSTime.",
-    ],
-  },
-
-  // ---- Vídeo (roadmap — plano Pro, BYOK conforme decisão do Free/Pro) ----
-  {
-    id: "fal-video",
-    category: "video",
-    name: "Fal.ai (Kling / Seedance)",
-    description: "API unificada que dá acesso a vários modelos de vídeo por IA com uma única chave.",
-    tiers: ["freeCredits", "paid"],
-    difficulty: "Fácil",
-    setupTime: "~4 min",
-    recommended: true,
-    implemented: false,
-    notes: "Ainda não disponível no POSTime — é o provedor planejado para o plano Pro, para vídeos gerados por IA além do modo Ken Burns gratuito.",
-    signupUrl: "https://fal.ai/",
-    apiKeyUrl: "https://fal.ai/dashboard/keys",
-    steps: [
-      "Acesse fal.ai e crie uma conta.",
-      "Abra o Dashboard e vá em \"Keys\".",
-      "Clique em \"Add key\" e copie o valor gerado.",
-      "Guarde a chave para quando este recurso for lançado no POSTime.",
-    ],
-  },
-  {
-    id: "kling",
-    category: "video",
-    name: "Kling AI",
-    description: "Geração de vídeo por IA direto na plataforma da Kuaishou.",
-    tiers: ["freeCredits", "paid"],
-    difficulty: "Média",
-    setupTime: "~5 min",
-    implemented: false,
-    notes: "Ainda não disponível no POSTime.",
-    signupUrl: "https://klingai.com/",
-    apiKeyUrl: "https://klingai.com/",
-    steps: [
-      "Acesse klingai.com e crie uma conta.",
-      "Abra a área de desenvolvedor/API.",
-      "Gere uma chave de API.",
-      "Guarde a chave para quando este recurso for lançado no POSTime.",
-    ],
-  },
-  {
-    id: "runway",
-    category: "video",
-    name: "Runway",
-    description: "Um dos pioneiros em vídeo generativo por IA, com API própria.",
-    tiers: ["paid"],
-    difficulty: "Média",
-    setupTime: "~5 min",
-    implemented: false,
-    notes: "Ainda não disponível no POSTime.",
-    signupUrl: "https://runwayml.com/",
-    apiKeyUrl: "https://dev.runwayml.com/",
-    steps: [
-      "Acesse runwayml.com e crie uma conta.",
-      "Abra o portal de desenvolvedor (dev.runwayml.com).",
-      "Gere uma chave de API em \"API Keys\".",
-      "Guarde a chave para quando este recurso for lançado no POSTime.",
-    ],
-  },
-  {
-    id: "luma",
-    category: "video",
-    name: "Luma AI",
-    description: "Modelos de vídeo generativo (Dream Machine) com API própria.",
-    tiers: ["freeCredits", "paid"],
-    difficulty: "Média",
-    setupTime: "~5 min",
-    implemented: false,
-    notes: "Ainda não disponível no POSTime.",
-    signupUrl: "https://lumalabs.ai/",
-    apiKeyUrl: "https://lumalabs.ai/dream-machine/api/keys",
-    steps: [
-      "Acesse lumalabs.ai e crie uma conta.",
-      "Abra a área de API (Dream Machine API).",
-      "Gere uma chave de API.",
-      "Guarde a chave para quando este recurso for lançado no POSTime.",
     ],
   },
 
