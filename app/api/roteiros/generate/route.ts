@@ -19,6 +19,34 @@ async function logFallbackEvent(fromProvider: string, toProvider: string | null,
   }
 }
 
+const POOL_KEY_SLOTS = ["groq_1", "groq_2", "google_1", "google_2"] as const;
+const POOL_KEY_ENV_FALLBACK: Record<(typeof POOL_KEY_SLOTS)[number], string | undefined> = {
+  groq_1: process.env.GROQ_API_KEY,
+  groq_2: process.env.GROQ_API_KEY_2,
+  google_1: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+  google_2: process.env.GOOGLE_GENERATIVE_AI_API_KEY_2,
+};
+
+/**
+ * A key rotated from the Superadmin panel (app/admin/ia) overrides the env var
+ * for that slot — lets a leaked/rate-limited/expired key get swapped without a
+ * redeploy. Slots with no admin override just keep using the env var.
+ */
+async function resolvePoolKeys(): Promise<Record<(typeof POOL_KEY_SLOTS)[number], string | undefined>> {
+  const resolved = { ...POOL_KEY_ENV_FALLBACK };
+  try {
+    const { data } = await createAdminClient().from("ai_pool_keys").select("slot, encrypted_key, iv, auth_tag");
+    for (const row of data ?? []) {
+      if ((POOL_KEY_SLOTS as readonly string[]).includes(row.slot)) {
+        resolved[row.slot as (typeof POOL_KEY_SLOTS)[number]] = decryptApiKey(row.encrypted_key, row.iv, row.auth_tag);
+      }
+    }
+  } catch {
+    // best-effort — a lookup hiccup just means falling back to the env vars
+  }
+  return resolved;
+}
+
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -90,28 +118,15 @@ export async function POST(request: Request) {
   // Tried in order; each hop is logged so fallback_events shows how often — and how
   // deep into the chain — this actually fires.
   const freeModels = await getFreeTierModels();
+  const poolKeys = await resolvePoolKeys();
   const attempts: { provider: LlmProvider; apiKey: string; model: string; label: string }[] = [];
-  if (process.env.GROQ_API_KEY) {
-    attempts.push({ provider: "groq", apiKey: process.env.GROQ_API_KEY, model: freeModels.primary, label: "groq-1" });
+  if (poolKeys.groq_1) attempts.push({ provider: "groq", apiKey: poolKeys.groq_1, model: freeModels.primary, label: "groq-1" });
+  if (poolKeys.groq_2) attempts.push({ provider: "groq", apiKey: poolKeys.groq_2, model: freeModels.primary, label: "groq-2" });
+  if (poolKeys.google_1) {
+    attempts.push({ provider: "google", apiKey: poolKeys.google_1, model: freeModels.fallback, label: "google-1" });
   }
-  if (process.env.GROQ_API_KEY_2) {
-    attempts.push({ provider: "groq", apiKey: process.env.GROQ_API_KEY_2, model: freeModels.primary, label: "groq-2" });
-  }
-  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    attempts.push({
-      provider: "google",
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-      model: freeModels.fallback,
-      label: "google-1",
-    });
-  }
-  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY_2) {
-    attempts.push({
-      provider: "google",
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY_2,
-      model: freeModels.fallback,
-      label: "google-2",
-    });
+  if (poolKeys.google_2) {
+    attempts.push({ provider: "google", apiKey: poolKeys.google_2, model: freeModels.fallback, label: "google-2" });
   }
 
   if (attempts.length === 0) {
