@@ -460,6 +460,7 @@ export default function EstiloPage() {
   const n = wizard.selectedForVideo.length;
   const [showWarning, setShowWarning] = useState(false);
   const [prevN, setPrevN] = useState(n);
+  const [upsellDismissed, setUpsellDismissed] = useState(false);
   const sortedSelected = [...wizard.selectedForVideo].sort((a, b) => a - b);
   const assignedUrls = wizard.assignedOwnImageUrls();
   const smoothProgressPct = useSmoothBuildProgress(
@@ -1047,6 +1048,29 @@ export default function EstiloPage() {
             Ficam disponíveis por 6 horas. Baixe, compartilhe ou exclua quando quiser — os que sobrarem some sozinhos
             depois desse prazo.
           </p>
+          {!wizard.isSubscribed && !upsellDismissed && (
+            <div className="flex items-center gap-3 mb-4 px-4 py-3 rounded-xl bg-[color-mix(in_srgb,var(--gold)_10%,transparent)] border-[0.5px] border-[color-mix(in_srgb,var(--gold)_30%,transparent)]">
+              <Icon name="crown" className="text-[var(--gold)] text-lg shrink-0" />
+              <p className="flex-1 text-[12.5px] text-[var(--text-1)] leading-relaxed m-0">
+                Gostou do resultado? Assine o Pro e nunca mais espere o limite diário.
+              </p>
+              <button
+                type="button"
+                onClick={() => wizard.openUpgradeModal()}
+                className="shrink-0 text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-br from-[var(--gold)] to-[var(--teal)] text-[#0B1220] border-none cursor-pointer whitespace-nowrap"
+              >
+                Assinar
+              </button>
+              <button
+                type="button"
+                aria-label="Dispensar"
+                onClick={() => setUpsellDismissed(true)}
+                className="shrink-0 bg-transparent border-none text-[var(--text-3)] cursor-pointer flex hover:text-[var(--text-1)]"
+              >
+                <Icon name="minus" />
+              </button>
+            </div>
+          )}
           <div className="grid grid-cols-4 gap-3 max-[720px]:grid-cols-3 max-[480px]:grid-cols-2">
             {[...wizard.videos]
               .sort((a, b) => b.temaIndex - a.temaIndex)

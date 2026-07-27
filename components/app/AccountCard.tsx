@@ -63,6 +63,16 @@ export function AccountCard() {
           </div>
         </div>
       </div>
+
+      {!wizard.isSubscribed && (
+        <button
+          type="button"
+          onClick={() => wizard.openUpgradeModal()}
+          className="flex items-center justify-center gap-1.5 w-full mb-3 py-2 rounded-lg text-[11.5px] font-semibold text-[#0B1220] bg-gradient-to-br from-[var(--gold)] to-[var(--teal)] border-none cursor-pointer transition-all hover:brightness-110"
+        >
+          <Icon name="crown" /> Assinar Pro e destravar tudo
+        </button>
+      )}
       {wizard.userEmail && (
         <div className="text-[11px] text-[var(--text-3)] mb-3 truncate" title={wizard.userEmail}>
           {wizard.userEmail}
