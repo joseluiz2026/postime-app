@@ -53,8 +53,8 @@ export type StyleName =
   | "Split Screen";
 export type SceneSeconds = 1 | 2 | 3 | 4 | 5;
 export type MusicMoodSelection = MusicMood | "auto";
-export type CaptionColor = "auto" | "white" | "black" | "yellow" | "red";
-export type CaptionBackground = "auto" | "none" | "white" | "black" | "yellow" | "red";
+export type CaptionColor = "auto" | "white" | "black" | "yellow" | "red" | "green" | "blue" | "purple";
+export type CaptionBackground = "auto" | "none" | "white" | "black" | "yellow" | "red" | "green" | "blue" | "purple";
 export type CaptionSize = "small" | "medium" | "large";
 export type CaptionFont = "poppins" | "anton" | "archivoblack";
 export type WatermarkPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -189,6 +189,10 @@ type WizardState = {
   sceneSecondsByTema: SceneSeconds[];
   musicMoodByTema: MusicMoodSelection[];
   imageThemeByTema: ImageThemeId[];
+  // 0-200, % of the narration's original recorded volume; 100 = unchanged.
+  narrationVolume: number;
+  // 0-100 absolute %; null = "automático" (quieter under narration, louder alone).
+  musicVolume: number | null;
   captionColor: CaptionColor;
   captionSize: CaptionSize;
   captionFont: CaptionFont;
@@ -268,6 +272,8 @@ type WizardContextValue = WizardState & {
   toggleSelectedForVideo: (idx: number) => void;
 
   setSelectedStyle: (s: StyleName) => void;
+  setNarrationVolume: (v: number) => void;
+  setMusicVolume: (v: number | null) => void;
   setCaptionColor: (c: CaptionColor) => void;
   setCaptionSize: (s: CaptionSize) => void;
   setCaptionFont: (f: CaptionFont) => void;
@@ -389,6 +395,8 @@ export function WizardProvider({
   const [sceneSecondsByTema, setSceneSecondsByTema] = useState<SceneSeconds[]>([]);
   const [musicMoodByTema, setMusicMoodByTema] = useState<MusicMoodSelection[]>([]);
   const [imageThemeByTema, setImageThemeByTema] = useState<ImageThemeId[]>([]);
+  const [narrationVolume, setNarrationVolume] = useState(100);
+  const [musicVolume, setMusicVolume] = useState<number | null>(null);
   const [watermark, setWatermark] = useState<{ url: string; path: string } | null>(null);
   const [watermarkPosition, setWatermarkPosition] = useState<WatermarkPosition>("bottom-right");
   const [watermarkUploading, setWatermarkUploading] = useState(false);
@@ -982,6 +990,8 @@ export function WizardProvider({
                 mood: (musicMoodByTema[i] ?? "auto") === "auto" ? roteiros[i]?.mood : musicMoodByTema[i],
                 sceneSeconds: sceneSecondsByTema[i] ?? 3,
                 imageTheme: themeQueryFor(imageThemeByTema[i]),
+                narrationVolume,
+                musicVolume: musicVolume ?? undefined,
                 captionColor,
                 captionSize,
                 captionFont,
@@ -1059,6 +1069,8 @@ export function WizardProvider({
     sceneSecondsByTema,
     musicMoodByTema,
     imageThemeByTema,
+    narrationVolume,
+    musicVolume,
     captionColor,
     captionSize,
     captionFont,
@@ -1160,6 +1172,8 @@ export function WizardProvider({
       sceneSecondsByTema,
       musicMoodByTema,
       imageThemeByTema,
+      narrationVolume,
+      musicVolume,
       captionColor,
       captionSize,
       captionFont,
@@ -1227,6 +1241,8 @@ export function WizardProvider({
       deleteRoteiro,
       toggleSelectedForVideo,
       setSelectedStyle,
+      setNarrationVolume,
+      setMusicVolume,
       setCaptionColor,
       setCaptionSize,
       setCaptionFont,
@@ -1300,6 +1316,8 @@ export function WizardProvider({
       sceneSecondsByTema,
       musicMoodByTema,
       imageThemeByTema,
+      narrationVolume,
+      musicVolume,
       captionColor,
       captionSize,
       captionFont,

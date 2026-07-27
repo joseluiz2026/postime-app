@@ -64,9 +64,17 @@ const DEFAULT_STYLE = "Minimalista";
 const CAPTION_MAX_WIDTH_PX = 900;
 
 const CAPTION_SIZE_MULTIPLIERS: Record<string, number> = { small: 0.8, medium: 1, large: 1.25 };
-// Plain ffmpeg-recognized color names — no need for hex, and these read fine
-// as classic subtitle colors regardless of the app's own UI theme.
-const CAPTION_COLOR_MAP: Record<string, string> = { white: "white", black: "black", yellow: "yellow", red: "red" };
+// Plain ffmpeg-recognized color names where they're legible as-is; green/blue/purple
+// use explicit hex instead since ffmpeg's named "green"/"purple" are too dark to read.
+const CAPTION_COLOR_MAP: Record<string, string> = {
+  white: "white",
+  black: "black",
+  yellow: "yellow",
+  red: "red",
+  green: "0x22C55E",
+  blue: "0x3B82F6",
+  purple: "0xA855F7",
+};
 // Fixed opacities picked for legibility per color — white needs to be more
 // opaque than black to still read as a solid panel behind light-on-dark text.
 const CAPTION_BG_COLOR_MAP: Record<string, string> = {
@@ -74,6 +82,9 @@ const CAPTION_BG_COLOR_MAP: Record<string, string> = {
   black: "black@0.5",
   yellow: "0xFFD54A@0.85",
   red: "0xB91C1C@0.6",
+  green: "0x22C55E@0.75",
+  blue: "0x3B82F6@0.75",
+  purple: "0xA855F7@0.75",
 };
 const CAPTION_FONT_FILES: Record<string, string> = {
   poppins: "Poppins-Bold.ttf",
@@ -93,15 +104,33 @@ const CAPTION_FONT_WIDTH_RATIOS: Record<string, { normal: number; uppercase: num
 // narration/captions so the music keeps playing after the speech ends, then
 // fades out — instead of cutting off right when the talking stops.
 const MUSIC_OUTRO_SECONDS = 3;
+// Default music levels when the user hasn't set an explicit musicVolume:
+// quiet under narration so it doesn't compete with speech, louder when it's
+// the only audio (no narration to protect).
+const DEFAULT_MUSIC_VOLUME_WITH_NARRATION = 0.15;
+const DEFAULT_MUSIC_VOLUME_ALONE = 0.35;
 
 // Title/subtitle are a separate, always-on-screen overlay (not synced to
 // narration timing like captions) — a headline card near the top of the frame.
 // Fixed base sizes distinct from caption sizing since they read at a different
 // visual weight (title bigger/bolder, subtitle smaller, supporting text).
-const TITLE_BASE_FONTSIZE = 64;
+const TITLE_BASE_FONTSIZE = 84;
 const SUBTITLE_BASE_FONTSIZE = 42;
 const TITLE_TOP_MARGIN = 90;
+// Fallback gap used only when there's no title (subtitle alone still sits below
+// the top margin rather than flush against it). When a title IS present, its
+// actual wrapped height is measured instead — see TITLE_SUBTITLE_PADDING below.
 const TITLE_SUBTITLE_GAP = 90;
+// Padding between the title's own (measured) block height and the subtitle
+// that follows it, once a title is present.
+const TITLE_SUBTITLE_PADDING = 24;
+// No line_spacing is set on the drawtext filters below, so wrapped lines pack
+// at roughly the font's natural line height — approximated here since ffmpeg
+// doesn't report a wrapped block's height back to us ahead of the render.
+// Empirically measured against real rendered output (Poppins Bold): a naive
+// 1.2x guess left the subtitle overlapping the title's last line by ~125px on
+// a 7-line title — actual pitch measured ~1.40x, this adds a small margin.
+const OVERLAY_LINE_HEIGHT_FACTOR = 1.45;
 const LETTERBOX_HEIGHT = 150;
 const OVERLAY_SIDE_MARGIN = 60;
 // Cap on the in/out fade so very short cues (end close to start) still fade
@@ -377,7 +406,7 @@ async function buildOverlayCuesChain(opts: {
   size?: string;
   font?: string;
   shadow?: boolean;
-}): Promise<{ lines: string[]; outLabel: string }> {
+}): Promise<{ lines: string[]; outLabel: string; maxLines: number }> {
   const fontsize = Math.round(opts.baseFontsize * (CAPTION_SIZE_MULTIPLIERS[opts.size ?? "medium"] ?? 1));
   const fontcolor = (opts.color && CAPTION_COLOR_MAP[opts.color]) || "white";
   const widthRatios = CAPTION_FONT_WIDTH_RATIOS[opts.font ?? "poppins"] ?? CAPTION_FONT_WIDTH_RATIOS.poppins;
@@ -394,6 +423,7 @@ async function buildOverlayCuesChain(opts: {
 
   const lines: string[] = [];
   let cur = opts.inLabel;
+  let maxLines = 0;
 
   for (let i = 0; i < opts.cues.length; i++) {
     const cue = opts.cues[i];
@@ -402,6 +432,7 @@ async function buildOverlayCuesChain(opts: {
     if (end - start < 0.02) continue;
 
     const displayText = wrapCaptionText(cue.text, maxCharsPerLine);
+    maxLines = Math.max(maxLines, displayText.split("\n").length);
     const txtPath = path.join(opts.workDir, `${opts.idPrefix}_${i}.txt`);
     await writeFile(txtPath, displayText, "utf8");
     const txtEsc = escapeFilterPath(txtPath);
@@ -432,7 +463,7 @@ async function buildOverlayCuesChain(opts: {
     cur = out;
   }
 
-  return { lines, outLabel: cur };
+  return { lines, outLabel: cur, maxLines };
 }
 
 /**
@@ -479,6 +510,11 @@ export async function renderKenBurnsVideo(opts: {
   subtitleShadow?: boolean;
   durationSeconds?: number;
   musicPath?: string;
+  // 0-200, percentage of the narration's original recorded volume; 100 = unchanged.
+  narrationVolume?: number;
+  // 0-100 absolute percentage overriding the automatic music level; undefined/null
+  // keeps the automatic behavior (quieter under narration, louder alone).
+  musicVolume?: number | null;
   watermarkPath?: string;
   watermarkPosition?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
 }): Promise<number> {
@@ -526,6 +562,9 @@ export async function renderKenBurnsVideo(opts: {
   // Title/subtitle sit near the top and are unrelated to caption timing/style,
   // so they're built independently and just chained onto whatever came before.
   const overlayTopY = cfg.letterbox ? LETTERBOX_HEIGHT + 30 : TITLE_TOP_MARGIN;
+  // Default gap for a subtitle with no title above it; replaced with a
+  // measured value once the title chain (if any) reports its wrapped height.
+  let subtitleY = overlayTopY + TITLE_SUBTITLE_GAP;
   if (opts.titleCues && opts.titleCues.length > 0) {
     const titleChain = await buildOverlayCuesChain({
       cues: opts.titleCues,
@@ -543,6 +582,14 @@ export async function renderKenBurnsVideo(opts: {
     });
     filterLines.push(...titleChain.lines);
     outLabel = titleChain.outLabel;
+    // Wraps to more than one line push the subtitle down accordingly, instead
+    // of the old fixed 90px gap that only fit a single title line — a longer
+    // title used to render its 2nd+ line on top of the subtitle.
+    const titleFontsize = Math.round(
+      TITLE_BASE_FONTSIZE * (CAPTION_SIZE_MULTIPLIERS[opts.titleSize ?? "medium"] ?? 1),
+    );
+    const titleBlockHeight = titleChain.maxLines * titleFontsize * OVERLAY_LINE_HEIGHT_FACTOR;
+    subtitleY = overlayTopY + titleBlockHeight + TITLE_SUBTITLE_PADDING;
   }
   if (opts.subtitleCues && opts.subtitleCues.length > 0) {
     const subtitleChain = await buildOverlayCuesChain({
@@ -551,7 +598,7 @@ export async function renderKenBurnsVideo(opts: {
       workDir,
       inLabel: outLabel,
       idPrefix: "subtitle",
-      y: overlayTopY + TITLE_SUBTITLE_GAP,
+      y: subtitleY,
       baseFontsize: SUBTITLE_BASE_FONTSIZE,
       align: opts.subtitleAlign,
       color: opts.subtitleColor,
@@ -615,24 +662,31 @@ export async function renderKenBurnsVideo(opts: {
   const musicDur = outputDuration.toFixed(3);
   const musicFadeSeconds = 2;
   const fadeOutStart = Math.max(0, outputDuration - musicFadeSeconds).toFixed(3);
+  const narrationVolume = (Math.max(0, opts.narrationVolume ?? 100) / 100).toFixed(3);
+  const musicVolumeOverride =
+    typeof opts.musicVolume === "number" ? (Math.max(0, opts.musicVolume) / 100).toFixed(3) : null;
 
   if (narrationInputIndex !== null && musicInputIndex !== null) {
+    const musicVolume = musicVolumeOverride ?? DEFAULT_MUSIC_VOLUME_WITH_NARRATION.toString();
     filterLines.push(
-      `[${musicInputIndex}:a]atrim=0:${musicDur},asetpts=PTS-STARTPTS,volume=0.15,` +
+      `[${musicInputIndex}:a]atrim=0:${musicDur},asetpts=PTS-STARTPTS,volume=${musicVolume},` +
         `afade=t=in:st=0:d=${musicFadeSeconds},afade=t=out:st=${fadeOutStart}:d=${musicFadeSeconds}[music]`,
     );
+    filterLines.push(`[${narrationInputIndex}:a]volume=${narrationVolume}[narr]`);
     filterLines.push(
       // duration=longest (not "first"): music now intentionally outlasts the
       // narration by outroSeconds, so the mix must follow music's length, not
       // cut off the moment the narration track ends.
-      `[${narrationInputIndex}:a][music]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]`,
+      `[narr][music]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]`,
     );
     audioMapSpec = "[aout]";
   } else if (narrationInputIndex !== null) {
-    audioMapSpec = `${narrationInputIndex}:a`;
+    filterLines.push(`[${narrationInputIndex}:a]volume=${narrationVolume}[narr]`);
+    audioMapSpec = "[narr]";
   } else if (musicInputIndex !== null) {
+    const musicVolume = musicVolumeOverride ?? DEFAULT_MUSIC_VOLUME_ALONE.toString();
     filterLines.push(
-      `[${musicInputIndex}:a]atrim=0:${musicDur},asetpts=PTS-STARTPTS,volume=0.35,` +
+      `[${musicInputIndex}:a]atrim=0:${musicDur},asetpts=PTS-STARTPTS,volume=${musicVolume},` +
         `afade=t=in:st=0:d=${musicFadeSeconds},afade=t=out:st=${fadeOutStart}:d=${musicFadeSeconds}[music]`,
     );
     audioMapSpec = "[music]";

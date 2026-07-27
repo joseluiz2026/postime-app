@@ -201,6 +201,9 @@ const CAPTION_COLOR_OPTIONS: { id: CaptionColor; label: string; swatch: string }
   { id: "black", label: "Preto", swatch: "#0b0b0b" },
   { id: "yellow", label: "Amarelo", swatch: "#facc15" },
   { id: "red", label: "Vermelho", swatch: "#ef4444" },
+  { id: "green", label: "Verde", swatch: "#22c55e" },
+  { id: "blue", label: "Azul", swatch: "#3b82f6" },
+  { id: "purple", label: "Roxo", swatch: "#a855f7" },
 ];
 
 const CAPTION_BACKGROUND_OPTIONS: { id: CaptionBackground; label: string; swatch: string }[] = [
@@ -210,6 +213,9 @@ const CAPTION_BACKGROUND_OPTIONS: { id: CaptionBackground; label: string; swatch
   { id: "black", label: "Preto", swatch: "#0b0b0b" },
   { id: "yellow", label: "Amarelo", swatch: "#facc15" },
   { id: "red", label: "Vermelho", swatch: "#ef4444" },
+  { id: "green", label: "Verde", swatch: "#22c55e" },
+  { id: "blue", label: "Azul", swatch: "#3b82f6" },
+  { id: "purple", label: "Roxo", swatch: "#a855f7" },
 ];
 
 const CAPTION_SIZE_OPTIONS: { id: CaptionSize; label: string }[] = [
@@ -611,6 +617,60 @@ export default function EstiloPage() {
 
       <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
         <FieldLabel>
+          Áudio
+          <HelpTip
+            label="Como funciona o volume"
+            text="Ajuste o volume da narração gravada e da música de fundo. No automático, a música fica baixa para não competir com a narração (ou mais alta quando não há narração)."
+          />
+        </FieldLabel>
+        <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Volume da narração</span>
+        <div className="flex items-center gap-3 max-w-[420px]">
+          <span className="text-[11px] text-[var(--text-3)] shrink-0">Mudo</span>
+          <input
+            type="range"
+            min={0}
+            max={200}
+            value={wizard.narrationVolume}
+            onChange={(e) => wizard.setNarrationVolume(Number(e.target.value))}
+            className="flex-1 accent-[var(--gold)]"
+          />
+          <span className="text-[11px] text-[var(--text-3)] shrink-0">Alto</span>
+        </div>
+        <div className="mt-1.5">
+          <span className="text-[11px] text-[var(--text-3)]">{wizard.narrationVolume}%</span>
+        </div>
+
+        <span className="block text-xs font-medium text-[var(--text-2)] mt-4 mb-2">Volume da música de fundo</span>
+        <div className="flex items-center gap-3 max-w-[420px]">
+          <span className="text-[11px] text-[var(--text-3)] shrink-0">Mudo</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={wizard.musicVolume ?? 15}
+            onChange={(e) => wizard.setMusicVolume(Number(e.target.value))}
+            className="flex-1 accent-[var(--gold)]"
+          />
+          <span className="text-[11px] text-[var(--text-3)] shrink-0">Alto</span>
+        </div>
+        <div className="flex items-center gap-3 mt-1.5">
+          <span className="text-[11px] text-[var(--text-3)]">
+            {wizard.musicVolume === null ? "Automático" : `${wizard.musicVolume}%`}
+          </span>
+          {wizard.musicVolume !== null && (
+            <button
+              type="button"
+              onClick={() => wizard.setMusicVolume(null)}
+              className="text-[11px] text-[var(--teal)] bg-transparent border-none cursor-pointer underline p-0"
+            >
+              Voltar ao automático
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-6 pt-6 border-t-[0.5px] border-[var(--line)]">
+        <FieldLabel>
           Título
           <HelpTip
             label="Como funciona o título"
@@ -900,6 +960,25 @@ export default function EstiloPage() {
       )}
 
       <div className="mt-8">
+        {wizard.buildingVideos && wizard.buildProgress && (
+          <div className="mb-4 max-w-[360px]">
+            <div className="flex justify-between items-center mb-1.5">
+              <span className="text-[12px] text-[var(--text-2)]">
+                {wizard.buildProgress.completed} de {wizard.buildProgress.total} vídeo
+                {wizard.buildProgress.total === 1 ? "" : "s"} pronto
+                {wizard.buildProgress.total === 1 ? "" : "s"}
+              </span>
+              <span className="text-[12px] font-mono text-[var(--text-2)]">{Math.round(smoothProgressPct)}%</span>
+            </div>
+            <div className="w-full h-5 rounded-full bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] overflow-hidden">
+              <div
+                className="postime-progress-fill h-full bg-[var(--gold)] transition-[width] duration-300 ease-out"
+                style={{ width: `${smoothProgressPct}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         <Btn
           variant="primary"
           disabled={wizard.buildingVideos}
@@ -924,25 +1003,6 @@ export default function EstiloPage() {
           <Icon name={wizard.buildingVideos ? "loader-2" : "arrow-right"} spin={wizard.buildingVideos} />{" "}
           {wizard.buildingVideos ? "Montando vídeo..." : "Confirmar e montar vídeo"}
         </Btn>
-
-        {wizard.buildingVideos && wizard.buildProgress && (
-          <div className="mt-4 max-w-[360px]">
-            <div className="flex justify-between items-center mb-1.5">
-              <span className="text-[12px] text-[var(--text-2)]">
-                {wizard.buildProgress.completed} de {wizard.buildProgress.total} vídeo
-                {wizard.buildProgress.total === 1 ? "" : "s"} pronto
-                {wizard.buildProgress.total === 1 ? "" : "s"}
-              </span>
-              <span className="text-[12px] font-mono text-[var(--text-2)]">{Math.round(smoothProgressPct)}%</span>
-            </div>
-            <div className="w-full h-2 rounded-full bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] overflow-hidden">
-              <div
-                className="postime-progress-fill h-full bg-[var(--gold)] transition-[width] duration-300 ease-out"
-                style={{ width: `${smoothProgressPct}%` }}
-              />
-            </div>
-          </div>
-        )}
       </div>
     </Card>
   );
