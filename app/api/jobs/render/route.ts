@@ -79,6 +79,10 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null);
   const title = typeof body?.title === "string" ? body.title.slice(0, 120) : null;
+  const caption = typeof body?.caption === "string" ? body.caption.slice(0, 800) : null;
+  const hashtags: string[] = Array.isArray(body?.hashtags)
+    ? body.hashtags.filter((h: unknown): h is string => typeof h === "string" && h.trim().length > 0).slice(0, 10)
+    : [];
   const temaIndex = Number.isInteger(body?.temaIndex) ? (body.temaIndex as number) : null;
   const audioPath = String(body?.audioPath ?? "");
   const imageUrl = String(body?.imageUrl ?? "");
@@ -158,6 +162,8 @@ export async function POST(request: Request) {
       plan: "free",
       provider: "pexels",
       title,
+      caption,
+      hashtags,
       image_url: imageUrl || null,
       tema_index: temaIndex,
     })
@@ -348,7 +354,7 @@ export async function GET() {
 
   const { data: jobs, error } = await supabase
     .from("jobs")
-    .select("id, title, tema_index, image_url, video_url, duration_seconds, created_at")
+    .select("id, title, caption, hashtags, tema_index, image_url, video_url, duration_seconds, created_at")
     .eq("user_id", user.id)
     .eq("status", "pronto")
     .not("video_url", "is", null)
@@ -364,6 +370,8 @@ export async function GET() {
       return {
         id: job.id,
         title: job.title ?? "Vídeo",
+        caption: job.caption ?? undefined,
+        hashtags: job.hashtags ?? undefined,
         temaIndex: job.tema_index ?? -1,
         imageUrl: job.image_url ?? undefined,
         videoUrl: signed?.signedUrl,

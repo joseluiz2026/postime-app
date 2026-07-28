@@ -111,7 +111,15 @@ export type TextAlign = "left" | "center" | "right";
 export type TextOverlayCue = { id: string; text: string; start: number; end: number };
 
 export type OwnImage = { name: string; url: string; path: string };
-export type Roteiro = { meta: string; text: string; mood?: MusicMood; imageQuery?: string };
+export type Roteiro = {
+  meta: string;
+  text: string;
+  mood?: MusicMood;
+  imageQuery?: string;
+  tiktokTitle?: string;
+  tiktokCaption?: string;
+  tiktokHashtags?: string[];
+};
 // Core's video output is deliberately blind to distribution (see lib/distribution-context.tsx) —
 // it exposes an id so a channel-connect module can reference "which video", nothing about
 // publish state itself.
@@ -126,6 +134,8 @@ export type Video = {
   videoPath?: string;
   expiresAt?: string;
   durationSeconds?: number;
+  caption?: string;
+  hashtags?: string[];
 };
 
 export type ModalId =
@@ -1232,11 +1242,13 @@ export function WizardProvider({
         const i = indices[pos];
         const image = imageByIndex.get(i);
         const base: Omit<Video, "id"> = {
-          title: `Tema ${String(i + 1).padStart(2, "0")} · ${selectedStyle}`,
+          title: roteiros[i]?.tiktokTitle || `Tema ${String(i + 1).padStart(2, "0")} · ${selectedStyle}`,
           temaIndex: i,
           style: selectedStyle,
           imageUrl: image?.url,
           imageCredit: image?.photographer,
+          caption: roteiros[i]?.tiktokCaption,
+          hashtags: roteiros[i]?.tiktokHashtags,
         };
         const result = await (async (): Promise<Omit<Video, "id">> => {
           const audioPath = audioPaths[i];
@@ -1247,6 +1259,8 @@ export function WizardProvider({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 title: base.title,
+                caption: base.caption,
+                hashtags: base.hashtags,
                 temaIndex: i,
                 audioPath,
                 imageUrl: image.url,

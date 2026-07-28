@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { useWizard, type Video } from "@/lib/wizard-context";
@@ -17,6 +18,15 @@ export default function DownloadPage() {
   const wizard = useWizard();
   const distribution = useDistribution();
   const router = useRouter();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  async function handleCopyCaption(video: Video) {
+    const hashtagsLine = (video.hashtags ?? []).map((h) => `#${h}`).join(" ");
+    const text = [video.title, video.caption, hashtagsLine].filter(Boolean).join("\n\n");
+    await navigator.clipboard.writeText(text);
+    setCopiedId(video.id);
+    setTimeout(() => setCopiedId((id) => (id === video.id ? null : id)), 2000);
+  }
 
   function handleRegravar(video: Video) {
     if (video.videoUrl) {
@@ -84,7 +94,17 @@ export default function DownloadPage() {
                   </div>
                 )}
                 <div className="p-3">
-                  <div className="text-[12.5px] font-medium text-[var(--text-1)] mb-3">{video.title}</div>
+                  <div className="text-[12.5px] font-medium text-[var(--text-1)] mb-1 leading-snug">{video.title}</div>
+                  {video.hashtags && video.hashtags.length > 0 && (
+                    <div className="text-[10.5px] text-[var(--text-3)] mb-3 truncate">
+                      {video.hashtags
+                        .slice(0, 4)
+                        .map((h) => `#${h}`)
+                        .join(" ")}
+                      {video.hashtags.length > 4 ? ` +${video.hashtags.length - 4}` : ""}
+                    </div>
+                  )}
+                  {!video.hashtags?.length && <div className="mb-3" />}
                   {video.videoUrl ? (
                     <>
                       <div className="flex flex-wrap gap-1.5">
@@ -112,6 +132,16 @@ export default function DownloadPage() {
                           <Icon name="share" />
                         </button>
                       </div>
+                      {(video.caption || (video.hashtags && video.hashtags.length > 0)) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopyCaption(video)}
+                          className="w-full mt-1.5 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] border-[var(--line)] text-[var(--text-2)] bg-transparent transition-all hover:border-[var(--gold)] hover:text-[var(--gold)] cursor-pointer"
+                        >
+                          <Icon name={copiedId === video.id ? "check" : "file-text"} />{" "}
+                          {copiedId === video.id ? "Copiado!" : "Copiar legenda + hashtags"}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleRegravar(video)}
