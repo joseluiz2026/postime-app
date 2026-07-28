@@ -1096,6 +1096,72 @@ export default function EstiloPage() {
         )}
       </div>
 
+      <div className="mt-6 pt-6 border-t-2 border-[var(--line-strong)]">
+        <FieldLabel className="text-[15px] font-semibold text-[var(--text-1)]">
+          Card final de assinatura (Pro)
+          <HelpTip
+            label="Como funciona o card final"
+            text="Depois do vídeo escurecer no final, sua logo e uma chamada para assinar aparecem por alguns segundos (fade in e fade out) antes do vídeo acabar. Recurso do plano Pro."
+          />
+        </FieldLabel>
+        <p className="text-[13px] text-[var(--text-2)] mb-4 leading-relaxed">
+          Mostra sua logo e uma frase de chamada (ex: &quot;Assine o app&quot;) na tela preta do final do vídeo.
+        </p>
+        <div className="flex gap-2 mb-4">
+          <Pill selected={wizard.endCardEnabled} onClick={() => wizard.setEndCardEnabled(true)}>
+            Ativado
+          </Pill>
+          <Pill selected={!wizard.endCardEnabled} onClick={() => wizard.setEndCardEnabled(false)}>
+            Desativado
+          </Pill>
+        </div>
+        {wizard.endCardEnabled && (
+          <>
+            {!wizard.endCardLogo ? (
+              <Dropzone
+                icon="photo"
+                title={wizard.endCardLogoUploading ? "Enviando..." : "Clique para escolher um PNG transparente"}
+                subtitle="PNG com fundo transparente · mín. 320x320px · até 5MB"
+                accept=".png,image/png"
+                onFiles={(files) => wizard.uploadEndCardLogo(files[0])}
+              />
+            ) : (
+              <div className="flex items-center gap-3 bg-[var(--bg-2)] border-[0.5px] border-[var(--line)] rounded-[10px] pl-2 pr-3 py-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={wizard.endCardLogo.url}
+                  alt=""
+                  className="w-9 h-9 object-contain rounded-md shrink-0 bg-[var(--bg-3)]"
+                />
+                <span className="text-[13px] text-[var(--text-2)] flex-1">Logo enviada</span>
+                <button
+                  type="button"
+                  aria-label="Remover logo do card final"
+                  onClick={wizard.removeEndCardLogo}
+                  className="shrink-0 bg-transparent border-none text-[var(--text-3)] cursor-pointer text-sm leading-none flex hover:text-[var(--gold)]"
+                >
+                  <Icon name="minus" />
+                </button>
+              </div>
+            )}
+            {wizard.endCardLogoError && (
+              <p className="text-[13px] text-[var(--gold)] mt-3">
+                <Icon name="alert-triangle" /> {wizard.endCardLogoError}
+              </p>
+            )}
+            <div className="mt-4">
+              <span className="block text-xs font-medium text-[var(--text-2)] mb-2">Frase do card final</span>
+              <TextInput
+                value={wizard.endCardText}
+                onChange={(e) => wizard.setEndCardText(e.target.value)}
+                placeholder="Assine o app e crie o seu vídeo agora"
+                maxLength={200}
+              />
+            </div>
+          </>
+        )}
+      </div>
+
       {showWarning && (
         <p className="text-[13px] text-[var(--text-2)] mt-3">
           <Icon name="alert-triangle" /> Selecione ao menos um roteiro salvo na aba Gravação antes de montar o vídeo.

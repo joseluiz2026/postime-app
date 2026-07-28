@@ -20,6 +20,11 @@ const ALLOWED_CAPTION_FONTS = ["poppins", "anton", "archivoblack"] as const;
 const ALLOWED_WATERMARK_POSITIONS = ["top-left", "top-right", "bottom-left", "bottom-right"] as const;
 const ALLOWED_TEXT_ALIGNS = ["left", "center", "right"] as const;
 const MAX_OVERLAY_CUES = 12;
+// The end-card (logo + subscribe CTA on the final black frame) is meant to be
+// Pro-only. TEMPORARY: also allow it on Free-plan accounts so it can be
+// tested end-to-end before launch — flip this back to false once verified.
+const ALLOW_END_CARD_FOR_FREE_TESTING = true;
+const MAX_END_CARD_TEXT_LENGTH = 200;
 
 /** Sanitizes a raw título/subtítulo cue array from the client: keeps only
  * well-formed {text, start, end} entries, trims/caps text length, clamps
@@ -128,6 +133,10 @@ export async function POST(request: Request) {
   const watermarkPosition = ALLOWED_WATERMARK_POSITIONS.includes(body?.watermarkPosition)
     ? (body.watermarkPosition as string)
     : "bottom-right";
+  const endCardEnabledRequested = body?.endCardEnabled === true;
+  const endCardLogoPath = typeof body?.endCardLogoPath === "string" ? body.endCardLogoPath : "";
+  const endCardText =
+    typeof body?.endCardText === "string" ? body.endCardText.trim().slice(0, MAX_END_CARD_TEXT_LENGTH) : "";
   // Per-segment own-photo overrides (from the Estilo "Fotos por vídeo" picker) — index
   // k is the k-th image segment of this video. A non-https entry is treated as "no
   // override for this slot", same as it being absent — that slot still auto-fetches stock.
@@ -141,9 +150,11 @@ export async function POST(request: Request) {
     : [];
   const hasAudio = audioPath.length > 0;
   const hasWatermark = watermarkPath.length > 0;
+  const hasEndCardLogo = endCardLogoPath.length > 0;
   if (
     (hasAudio && !audioPath.startsWith(`${user.id}/`)) ||
     (hasWatermark && !watermarkPath.startsWith(`${user.id}/`)) ||
+    (hasEndCardLogo && !endCardLogoPath.startsWith(`${user.id}/`)) ||
     !/^https:\/\//.test(imageUrl)
   ) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
@@ -249,6 +260,22 @@ export async function POST(request: Request) {
       }
     }
 
+    // Pro-only feature (see ALLOW_END_CARD_FOR_FREE_TESTING above for the
+    // temporary testing exception) — gated here rather than in ken-burns.ts so
+    // the renderer stays a dumb executor of whatever it's told to draw.
+    const endCardEligible = hasActiveSubscription || ALLOW_END_CARD_FOR_FREE_TESTING;
+    const showEndCard = endCardEnabledRequested && endCardEligible;
+    let endCardLogoFile: string | undefined;
+    if (showEndCard && hasEndCardLogo) {
+      const { data: logoBlob, error: logoErr } = await supabase.storage
+        .from("postime-images")
+        .download(endCardLogoPath);
+      if (!logoErr && logoBlob) {
+        endCardLogoFile = path.join(dir, "end-card-logo.png");
+        await writeFile(endCardLogoFile, Buffer.from(await logoBlob.arrayBuffer()));
+      }
+    }
+
     const outputFile = path.join(dir, "output.mp4");
     const durationSeconds = await renderKenBurnsVideo({
       imagePaths: imageFiles,
@@ -281,6 +308,9 @@ export async function POST(request: Request) {
       watermarkPosition: watermarkFile ? (watermarkPosition as "top-left" | "top-right" | "bottom-left" | "bottom-right") : undefined,
       captionFont,
       musicPath: musicPath ?? undefined,
+      endCardEnabled: showEndCard,
+      endCardLogoPath: endCardLogoFile,
+      endCardText: showEndCard ? endCardText || undefined : undefined,
     });
 
     const videoBuffer = await readFile(outputFile);

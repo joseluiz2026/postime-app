@@ -189,6 +189,9 @@ async function inspectWatermarkPng(file: File): Promise<{ transparent: boolean; 
 // Render always scales the watermark to this fixed width (see lib/render/ken-burns.ts) —
 // anything narrower than this would be upscaled and look blurry in the final video.
 const WATERMARK_MIN_DIMENSION_PX = 180;
+// The end-card logo renders bigger (320px wide, see END_CARD_LOGO_WIDTH in
+// ken-burns.ts) than the small corner watermark, so it needs a higher floor.
+const END_CARD_LOGO_MIN_DIMENSION_PX = 320;
 
 type WizardState = {
   // account
@@ -282,6 +285,14 @@ type WizardState = {
   watermarkPosition: WatermarkPosition;
   watermarkUploading: boolean;
   watermarkError: string | null;
+  // End card: Pro-only logo + CTA shown on the final black frame (see
+  // OUTRO_CARD_SECONDS in lib/render/ken-burns.ts). Off by default even for
+  // eligible accounts — the user opts in per montagem.
+  endCardEnabled: boolean;
+  endCardText: string;
+  endCardLogo: { url: string; path: string } | null;
+  endCardLogoUploading: boolean;
+  endCardLogoError: string | null;
 
   // download
   videos: Video[];
@@ -368,6 +379,10 @@ type WizardContextValue = WizardState & {
   uploadWatermark: (file: File) => Promise<void>;
   removeWatermark: () => void;
   setWatermarkPosition: (pos: WatermarkPosition) => void;
+  setEndCardEnabled: (v: boolean) => void;
+  setEndCardText: (v: string) => void;
+  uploadEndCardLogo: (file: File) => Promise<void>;
+  removeEndCardLogo: () => void;
   confirmBuild: () => Promise<{ ok: boolean; failedIndices: number[]; dailyLimitHit: boolean }>;
   buildingVideos: boolean;
   buildProgress: { completed: number; total: number } | null;
@@ -473,6 +488,11 @@ export function WizardProvider({
   const [watermarkPosition, setWatermarkPosition] = useState<WatermarkPosition>("bottom-right");
   const [watermarkUploading, setWatermarkUploading] = useState(false);
   const [watermarkError, setWatermarkError] = useState<string | null>(null);
+  const [endCardEnabled, setEndCardEnabled] = useState(false);
+  const [endCardText, setEndCardText] = useState("");
+  const [endCardLogo, setEndCardLogo] = useState<{ url: string; path: string } | null>(null);
+  const [endCardLogoUploading, setEndCardLogoUploading] = useState(false);
+  const [endCardLogoError, setEndCardLogoError] = useState<string | null>(null);
 
   const setSceneSecondsForTema = useCallback((idx: number, s: SceneSeconds) => {
     setSceneSecondsByTema((prev) => prev.map((v, i) => (i === idx ? s : v)));
@@ -829,6 +849,70 @@ export function WizardProvider({
       return null;
     });
     setWatermarkError(null);
+  }, []);
+
+  const uploadEndCardLogo = useCallback(
+    async (file: File) => {
+      setEndCardLogoError(null);
+      if (file.type !== "image/png") {
+        setEndCardLogoError("A logo precisa ser um arquivo PNG.");
+        return;
+      }
+      setEndCardLogoUploading(true);
+      try {
+        const inspection = await inspectWatermarkPng(file);
+        if (!inspection) {
+          setEndCardLogoError("Não foi possível ler esse PNG. Tente outro arquivo.");
+          return;
+        }
+        let transparencyWarning: string | null = null;
+        if (!inspection.transparent) {
+          transparencyWarning =
+            "Esse PNG não tem fundo transparente de verdade — ele vai aparecer com um fundo sólido no card final. Pra um resultado limpo, exporte a logo com fundo transparente (ex: remove.bg).";
+        }
+        if (inspection.width < END_CARD_LOGO_MIN_DIMENSION_PX || inspection.height < END_CARD_LOGO_MIN_DIMENSION_PX) {
+          setEndCardLogoError(
+            `A imagem é muito pequena (${inspection.width}x${inspection.height}px). Envie pelo menos ${END_CARD_LOGO_MIN_DIMENSION_PX}x${END_CARD_LOGO_MIN_DIMENSION_PX}px.`,
+          );
+          return;
+        }
+        const supabase = createClient();
+        const path = `${userId}/end-card-logo.png`;
+        const { error: upErr } = await supabase.storage
+          .from("postime-images")
+          .upload(path, file, { contentType: "image/png", upsert: true });
+        if (upErr) {
+          setEndCardLogoError("Não foi possível enviar a logo agora. Tente novamente.");
+          return;
+        }
+        const { data: signed } = await supabase.storage
+          .from("postime-images")
+          .createSignedUrl(path, 60 * 60 * 24);
+        if (signed?.signedUrl) {
+          setEndCardLogo({ url: signed.signedUrl, path });
+          if (transparencyWarning) setEndCardLogoError(transparencyWarning);
+        }
+      } catch {
+        setEndCardLogoError("Falha de conexão. Tente novamente.");
+      } finally {
+        setEndCardLogoUploading(false);
+      }
+    },
+    [userId],
+  );
+
+  const removeEndCardLogo = useCallback(() => {
+    setEndCardLogo((prev) => {
+      if (prev) {
+        const supabase = createClient();
+        supabase.storage
+          .from("postime-images")
+          .remove([prev.path])
+          .catch(() => {});
+      }
+      return null;
+    });
+    setEndCardLogoError(null);
   }, []);
 
   const setDuration = useCallback(
@@ -1299,6 +1383,9 @@ export function WizardProvider({
                 subtitleShadow,
                 watermarkPath: watermark?.path,
                 watermarkPosition,
+                endCardEnabled,
+                endCardLogoPath: endCardLogo?.path,
+                endCardText,
               }),
             });
             const renderData = await renderRes.json();
@@ -1380,6 +1467,9 @@ export function WizardProvider({
     ownVideoClips,
     watermark,
     watermarkPosition,
+    endCardEnabled,
+    endCardLogo,
+    endCardText,
   ]);
 
   const saveWhatsapp = useCallback(() => {
@@ -1474,6 +1564,11 @@ export function WizardProvider({
       watermarkPosition,
       watermarkUploading,
       watermarkError,
+      endCardEnabled,
+      endCardText,
+      endCardLogo,
+      endCardLogoUploading,
+      endCardLogoError,
       videos,
       videoCountStatus,
       buildingVideos,
@@ -1550,6 +1645,10 @@ export function WizardProvider({
       uploadWatermark,
       removeWatermark,
       setWatermarkPosition,
+      setEndCardEnabled,
+      setEndCardText,
+      uploadEndCardLogo,
+      removeEndCardLogo,
       confirmBuild,
       saveWhatsapp,
       openModal,
@@ -1623,6 +1722,11 @@ export function WizardProvider({
       watermarkPosition,
       watermarkUploading,
       watermarkError,
+      endCardEnabled,
+      endCardText,
+      endCardLogo,
+      endCardLogoUploading,
+      endCardLogoError,
       videos,
       videoCountStatus,
       buildingVideos,
@@ -1673,6 +1777,10 @@ export function WizardProvider({
       uploadWatermark,
       removeWatermark,
       setWatermarkPosition,
+      setEndCardEnabled,
+      setEndCardText,
+      uploadEndCardLogo,
+      removeEndCardLogo,
       confirmBuild,
       saveWhatsapp,
       openModal,

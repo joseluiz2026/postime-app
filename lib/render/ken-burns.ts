@@ -114,6 +114,19 @@ const DEFAULT_MUSIC_VOLUME_ALONE = 0.35;
 // option, so no video ends on an abrupt cut regardless of style/content.
 const OUTRO_FADE_SECONDS = 2;
 
+// Optional end card (logo + subscribe CTA), composited on top of the frame
+// only after OUTRO_FADE_SECONDS above has already taken it to solid black —
+// a separate, longer hold so the logo/CTA have time to fade in, be read, and
+// fade out again before the clip actually ends. Only rendered when the caller
+// sets endCardEnabled (see renderKenBurnsVideo opts); plan/toggle gating lives
+// in the API route, not here.
+const OUTRO_CARD_SECONDS = 4;
+const END_CARD_TRANSITION_SECONDS = 0.6;
+const END_CARD_LOGO_WIDTH = 320;
+// Used only when the end card is enabled but the caller left the CTA text
+// blank — placeholder copy, swap for real branding whenever available.
+const DEFAULT_END_CARD_TEXT = "Assine o app e crie o seu vídeo agora";
+
 // Title/subtitle are a separate, always-on-screen overlay (not synced to
 // narration timing like captions) — a headline card near the top of the frame.
 // Fixed base sizes distinct from caption sizing since they read at a different
@@ -550,6 +563,13 @@ export async function renderKenBurnsVideo(opts: {
   musicVolume?: number | null;
   watermarkPath?: string;
   watermarkPosition?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  // End card: a logo + CTA shown after the outro fade, on the already-black
+  // frame (see OUTRO_CARD_SECONDS). endCardEnabled is the on/off switch — the
+  // logo/text below are only rendered when it's true; endCardText falls back
+  // to DEFAULT_END_CARD_TEXT when left blank.
+  endCardEnabled?: boolean;
+  endCardLogoPath?: string;
+  endCardText?: string;
 }): Promise<number> {
   if (opts.imagePaths.length === 0) throw new Error("renderKenBurnsVideo: no images provided");
   if (!opts.audioPath && opts.durationSeconds === undefined) {
@@ -557,11 +577,21 @@ export async function renderKenBurnsVideo(opts: {
   }
 
   const duration = opts.durationSeconds ?? (await probeDurationSeconds(opts.audioPath!));
-  const outroSeconds = opts.musicPath ? MUSIC_OUTRO_SECONDS : 0;
-  const outputDuration = duration + outroSeconds;
+  const musicOutroSeconds = opts.musicPath ? MUSIC_OUTRO_SECONDS : 0;
+  const hasEndCard = opts.endCardEnabled === true;
+  const cardSeconds = hasEndCard ? OUTRO_CARD_SECONDS : 0;
+  // "contentEnd" is where the narration/music tail actually finishes and the
+  // outro fade-to-black completes — the end card (if any) then holds on that
+  // black frame for cardSeconds more before the clip actually ends.
+  const contentEnd = duration + musicOutroSeconds;
+  const outputDuration = contentEnd + cardSeconds;
   // Clamped so a video shorter than the fade itself just fades from the start
   // instead of computing a negative offset.
-  const outroFadeStart = Math.max(0, outputDuration - OUTRO_FADE_SECONDS);
+  const outroFadeStart = Math.max(0, contentEnd - OUTRO_FADE_SECONDS);
+  // Extra tail of frames the base image/video chain needs to generate so
+  // there's picture (now solid black past outroFadeStart) covering the full
+  // output, including any end-card hold on top of the existing music outro.
+  const chainTailSeconds = musicOutroSeconds + cardSeconds;
   const fps = 25;
   const workDir = path.dirname(opts.outputPath);
   const cfg = STYLE_CONFIGS[opts.style ?? DEFAULT_STYLE] ?? STYLE_CONFIGS[DEFAULT_STYLE];
@@ -570,7 +600,7 @@ export async function renderKenBurnsVideo(opts: {
     imageCount: opts.imagePaths.length,
     mediaTypes: opts.mediaTypes ?? [],
     duration,
-    outroSeconds,
+    outroSeconds: chainTailSeconds,
     fps,
     cfg,
   });
@@ -686,6 +716,15 @@ export async function renderKenBurnsVideo(opts: {
     watermarkInputIndex = nextInputIndex++;
   }
 
+  // Looped (like the base images) rather than a single frame: the fade filter
+  // applied to it below needs a continuous stream of timestamps to compute its
+  // in/out alpha ramp against, not one static frame repeated by overlay's sync.
+  let endCardLogoInputIndex: number | null = null;
+  if (hasEndCard && opts.endCardLogoPath) {
+    args.push("-loop", "1", "-i", opts.endCardLogoPath);
+    endCardLogoInputIndex = nextInputIndex++;
+  }
+
   if (watermarkInputIndex !== null) {
     // Scaled to a fixed width (not proportional to canvas) so the logo reads as
     // a consistent brand mark regardless of scene count; corner margin keeps it
@@ -709,13 +748,62 @@ export async function renderKenBurnsVideo(opts: {
   filterLines.push(`[${outLabel}]fade=t=out:st=${outroFadeStart.toFixed(3)}:d=${OUTRO_FADE_SECONDS}:color=black[vout]`);
   outLabel = "vout";
 
+  // End card: composited on top of the now-solid-black [vout], so it never
+  // interacts with the fade above — it fades in once the picture has already
+  // gone black, holds, then fades back out before the clip ends.
+  if (hasEndCard) {
+    const cardStart = contentEnd;
+    const cardEnd = outputDuration;
+    const cardFadeDur = Math.min(END_CARD_TRANSITION_SECONDS, cardSeconds / 2);
+    const cardFadeOutStart = Math.max(cardStart, cardEnd - cardFadeDur);
+
+    if (endCardLogoInputIndex !== null) {
+      filterLines.push(
+        `[${endCardLogoInputIndex}:v]scale=${END_CARD_LOGO_WIDTH}:-1,format=yuva420p,` +
+          `fade=t=in:st=${cardStart.toFixed(3)}:d=${cardFadeDur.toFixed(3)}:alpha=1,` +
+          `fade=t=out:st=${cardFadeOutStart.toFixed(3)}:d=${cardFadeDur.toFixed(3)}:alpha=1[endcardlogo]`,
+      );
+      filterLines.push(
+        `[${outLabel}][endcardlogo]overlay=x=(main_w-overlay_w)/2:y=(main_h-overlay_h)/2-120[endcardimg]`,
+      );
+      outLabel = "endcardimg";
+    }
+
+    const ctaText = (opts.endCardText && opts.endCardText.trim()) || DEFAULT_END_CARD_TEXT;
+    const ctaFontsize = 46;
+    const ctaWidthRatios = CAPTION_FONT_WIDTH_RATIOS.poppins;
+    const ctaMaxChars = Math.max(6, Math.floor(CAPTION_MAX_WIDTH_PX / (ctaFontsize * ctaWidthRatios.normal)));
+    const ctaDisplayText = wrapCaptionText(sanitizeCaptionGlyphs(ctaText), ctaMaxChars);
+    const ctaTxtPath = path.join(workDir, "endcard_cta.txt");
+    await writeFile(ctaTxtPath, ctaDisplayText, "utf8");
+    const ctaTxtEsc = escapeFilterPath(ctaTxtPath);
+    const ctaFontEsc = escapeFilterPath(getCaptionFontPath("poppins"));
+    const ctaY = endCardLogoInputIndex !== null ? "h/2+140" : "(h-text_h)/2";
+    const ctaFadeInEnd = (cardStart + cardFadeDur).toFixed(3);
+
+    filterLines.push(
+      `[${outLabel}]drawtext=fontfile='${ctaFontEsc}':textfile='${ctaTxtEsc}':fontsize=${ctaFontsize}:` +
+        `fontcolor=white:x=(w-text_w)/2:text_align=center:y=${ctaY}:` +
+        `shadowcolor=black@0.65:shadowx=2:shadowy=2:` +
+        `alpha='if(lt(t,${ctaFadeInEnd}),(t-${cardStart.toFixed(3)})/${cardFadeDur.toFixed(3)},` +
+        `if(gt(t,${cardFadeOutStart.toFixed(3)}),(${cardEnd.toFixed(3)}-t)/${cardFadeDur.toFixed(3)},1))':` +
+        `enable='between(t,${cardStart.toFixed(3)},${cardEnd.toFixed(3)})'[endcardtext]`,
+    );
+    outLabel = "endcardtext";
+  }
+
   let audioMapSpec: string;
-  const musicDur = outputDuration.toFixed(3);
+  const musicDur = contentEnd.toFixed(3);
   const musicFadeSeconds = OUTRO_FADE_SECONDS;
   const fadeOutStart = outroFadeStart.toFixed(3);
   const narrationVolume = (Math.max(0, opts.narrationVolume ?? 100) / 100).toFixed(3);
   const musicVolumeOverride =
     typeof opts.musicVolume === "number" ? (Math.max(0, opts.musicVolume) / 100).toFixed(3) : null;
+  // Every audio branch below finishes (music/narration fade to silence) by
+  // contentEnd — apad extends that silence through the end-card hold so the
+  // audio track's length still matches the (now longer) video instead of
+  // ending early inside the container.
+  const audioPad = cardSeconds > 0 ? ",apad" : "";
 
   if (narrationInputIndex !== null && musicInputIndex !== null) {
     const musicVolume = musicVolumeOverride ?? DEFAULT_MUSIC_VOLUME_WITH_NARRATION.toString();
@@ -728,7 +816,7 @@ export async function renderKenBurnsVideo(opts: {
       // duration=longest (not "first"): music now intentionally outlasts the
       // narration by outroSeconds, so the mix must follow music's length, not
       // cut off the moment the narration track ends.
-      `[narr][music]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]`,
+      `[narr][music]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0${audioPad}[aout]`,
     );
     audioMapSpec = "[aout]";
   } else if (narrationInputIndex !== null) {
@@ -736,14 +824,14 @@ export async function renderKenBurnsVideo(opts: {
     // still playing right up to the end — it needs its own fade to go quiet
     // together with the picture instead of getting cut off under the fade.
     filterLines.push(
-      `[${narrationInputIndex}:a]volume=${narrationVolume},afade=t=out:st=${fadeOutStart}:d=${musicFadeSeconds}[narr]`,
+      `[${narrationInputIndex}:a]volume=${narrationVolume},afade=t=out:st=${fadeOutStart}:d=${musicFadeSeconds}${audioPad}[narr]`,
     );
     audioMapSpec = "[narr]";
   } else if (musicInputIndex !== null) {
     const musicVolume = musicVolumeOverride ?? DEFAULT_MUSIC_VOLUME_ALONE.toString();
     filterLines.push(
       `[${musicInputIndex}:a]atrim=0:${musicDur},asetpts=PTS-STARTPTS,volume=${musicVolume},` +
-        `afade=t=in:st=0:d=${musicFadeSeconds},afade=t=out:st=${fadeOutStart}:d=${musicFadeSeconds}[music]`,
+        `afade=t=in:st=0:d=${musicFadeSeconds},afade=t=out:st=${fadeOutStart}:d=${musicFadeSeconds}${audioPad}[music]`,
     );
     audioMapSpec = "[music]";
   } else {
