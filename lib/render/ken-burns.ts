@@ -109,6 +109,10 @@ const MUSIC_OUTRO_SECONDS = 3;
 // the only audio (no narration to protect).
 const DEFAULT_MUSIC_VOLUME_WITH_NARRATION = 0.15;
 const DEFAULT_MUSIC_VOLUME_ALONE = 0.35;
+// Every rendered video ends with this fade to black (picture) and to silence
+// (all audio tracks) — a fixed, always-on outro treatment, not a per-style
+// option, so no video ends on an abrupt cut regardless of style/content.
+const OUTRO_FADE_SECONDS = 2;
 
 // Title/subtitle are a separate, always-on-screen overlay (not synced to
 // narration timing like captions) — a headline card near the top of the frame.
@@ -555,6 +559,9 @@ export async function renderKenBurnsVideo(opts: {
   const duration = opts.durationSeconds ?? (await probeDurationSeconds(opts.audioPath!));
   const outroSeconds = opts.musicPath ? MUSIC_OUTRO_SECONDS : 0;
   const outputDuration = duration + outroSeconds;
+  // Clamped so a video shorter than the fade itself just fades from the start
+  // instead of computing a negative offset.
+  const outroFadeStart = Math.max(0, outputDuration - OUTRO_FADE_SECONDS);
   const fps = 25;
   const workDir = path.dirname(opts.outputPath);
   const cfg = STYLE_CONFIGS[opts.style ?? DEFAULT_STYLE] ?? STYLE_CONFIGS[DEFAULT_STYLE];
@@ -696,10 +703,16 @@ export async function renderKenBurnsVideo(opts: {
     outLabel = "wmout";
   }
 
+  // Applied last, after every overlay (captions, titles, watermark) is already
+  // composited in — so the whole frame fades together instead of the picture
+  // fading while text/logo stay hard-cut on top of it.
+  filterLines.push(`[${outLabel}]fade=t=out:st=${outroFadeStart.toFixed(3)}:d=${OUTRO_FADE_SECONDS}:color=black[vout]`);
+  outLabel = "vout";
+
   let audioMapSpec: string;
   const musicDur = outputDuration.toFixed(3);
-  const musicFadeSeconds = 2;
-  const fadeOutStart = Math.max(0, outputDuration - musicFadeSeconds).toFixed(3);
+  const musicFadeSeconds = OUTRO_FADE_SECONDS;
+  const fadeOutStart = outroFadeStart.toFixed(3);
   const narrationVolume = (Math.max(0, opts.narrationVolume ?? 100) / 100).toFixed(3);
   const musicVolumeOverride =
     typeof opts.musicVolume === "number" ? (Math.max(0, opts.musicVolume) / 100).toFixed(3) : null;
@@ -719,7 +732,12 @@ export async function renderKenBurnsVideo(opts: {
     );
     audioMapSpec = "[aout]";
   } else if (narrationInputIndex !== null) {
-    filterLines.push(`[${narrationInputIndex}:a]volume=${narrationVolume}[narr]`);
+    // No music outro here, so (unlike the mixed branch above) narration is
+    // still playing right up to the end — it needs its own fade to go quiet
+    // together with the picture instead of getting cut off under the fade.
+    filterLines.push(
+      `[${narrationInputIndex}:a]volume=${narrationVolume},afade=t=out:st=${fadeOutStart}:d=${musicFadeSeconds}[narr]`,
+    );
     audioMapSpec = "[narr]";
   } else if (musicInputIndex !== null) {
     const musicVolume = musicVolumeOverride ?? DEFAULT_MUSIC_VOLUME_ALONE.toString();
