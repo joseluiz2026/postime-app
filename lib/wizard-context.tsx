@@ -772,6 +772,31 @@ export function WizardProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Video history: the underlying files never actually get deleted (see
+  // app/api/jobs/render's GET handler), so this repopulates "vídeos prontos" from
+  // past jobs instead of it only reflecting whatever was built in the current tab.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/jobs/render");
+        if (!res.ok || cancelled) return;
+        const { videos: history } = await res.json();
+        if (!Array.isArray(history) || history.length === 0 || cancelled) return;
+        setVideos((prev) => {
+          const existingIds = new Set(prev.map((v) => v.id));
+          const merged = [...prev, ...history.filter((v: Video) => !existingIds.has(v.id))];
+          return merged.sort((a, b) => a.temaIndex - b.temaIndex);
+        });
+      } catch {
+        // best-effort — an unrestored history just means starting fresh, not a hard error
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (!draftLoaded.current) return;
     const timer = setTimeout(() => {
@@ -1092,6 +1117,8 @@ export function WizardProvider({
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
+                title: base.title,
+                temaIndex: i,
                 audioPath,
                 imageUrl: image.url,
                 ownImageUrls: imageAssignmentsByTema[i] ?? [],

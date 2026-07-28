@@ -78,6 +78,8 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => null);
+  const title = typeof body?.title === "string" ? body.title.slice(0, 120) : null;
+  const temaIndex = Number.isInteger(body?.temaIndex) ? (body.temaIndex as number) : null;
   const audioPath = String(body?.audioPath ?? "");
   const imageUrl = String(body?.imageUrl ?? "");
   const captionText = typeof body?.text === "string" ? body.text.slice(0, 2000) : undefined;
@@ -145,7 +147,15 @@ export async function POST(request: Request) {
 
   const { data: job, error: jobErr } = await supabase
     .from("jobs")
-    .insert({ user_id: user.id, status: "processando", plan: "free", provider: "pexels" })
+    .insert({
+      user_id: user.id,
+      status: "processando",
+      plan: "free",
+      provider: "pexels",
+      title,
+      image_url: imageUrl || null,
+      tema_index: temaIndex,
+    })
     .select()
     .single();
   if (jobErr || !job) {
@@ -270,7 +280,7 @@ export async function POST(request: Request) {
     const expiresAt = new Date(Date.now() + VIDEO_TTL_SECONDS * 1000).toISOString();
     await supabase
       .from("jobs")
-      .update({ status: "pronto", video_url: videoPath, expires_at: expiresAt })
+      .update({ status: "pronto", video_url: videoPath, expires_at: expiresAt, duration_seconds: durationSeconds })
       .eq("id", job.id);
 
     return NextResponse.json({
@@ -307,4 +317,50 @@ export async function DELETE(request: Request) {
 
   await supabase.storage.from("postime-videos").remove([videoPath]);
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * Video history: nothing ever deletes the file in storage once a job reaches
+ * "pronto" (no cleanup job has ever run, despite the jobs migration's original
+ * comment describing one — see project memory), so a fresh signed URL can be minted
+ * for any past job regardless of whether its original expires_at already passed.
+ * This is what lets the wizard show "vídeos prontos" again after a refresh instead
+ * of only for the current in-memory session.
+ */
+export async function GET() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const { data: jobs, error } = await supabase
+    .from("jobs")
+    .select("id, title, tema_index, image_url, video_url, duration_seconds, created_at")
+    .eq("user_id", user.id)
+    .eq("status", "pronto")
+    .not("video_url", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (error) return NextResponse.json({ error: "load_failed" }, { status: 500 });
+
+  const videos = await Promise.all(
+    (jobs ?? []).map(async (job) => {
+      const { data: signed } = await supabase.storage
+        .from("postime-videos")
+        .createSignedUrl(job.video_url as string, VIDEO_TTL_SECONDS);
+      return {
+        id: job.id,
+        title: job.title ?? "Vídeo",
+        temaIndex: job.tema_index ?? -1,
+        imageUrl: job.image_url ?? undefined,
+        videoUrl: signed?.signedUrl,
+        videoPath: job.video_url as string,
+        durationSeconds: job.duration_seconds ?? undefined,
+        expiresAt: new Date(Date.now() + VIDEO_TTL_SECONDS * 1000).toISOString(),
+      };
+    }),
+  );
+
+  return NextResponse.json({ videos });
 }
