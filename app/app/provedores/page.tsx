@@ -6,11 +6,9 @@ import { useWizard } from "@/lib/wizard-context";
 import { Card } from "@/components/app/ui";
 import { ProviderCard } from "@/components/app/providers/ProviderCard";
 
-const CATEGORY_ORDER: ProviderCategory[] = ["texto", "voz"];
+const CATEGORY_ORDER: ProviderCategory[] = ["texto"];
 
-const CATEGORY_BANNER: Partial<Record<ProviderCategory, string>> = {
-  voz: "A narração hoje é gravada ou enviada por você. A clonagem de voz com ElevenLabs já tem uma prévia no passo Roteiros (plano Pro) — a conexão real de chave por aqui chega em seguida.",
-};
+const CATEGORY_BANNER: Partial<Record<ProviderCategory, string>> = {};
 
 export default function ProvedoresPage() {
   const wizard = useWizard();

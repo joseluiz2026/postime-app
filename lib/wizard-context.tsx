@@ -85,7 +85,6 @@ export type Video = {
 
 export type ModalId =
   | "upgrade"
-  | "eleven"
   | "account"
   | "whatsapp"
   | "tiktok"
@@ -99,7 +98,6 @@ type ModalState =
   // post-build banner), not because the user actually hit a limit — the modal
   // copy reads differently so it doesn't imply a limit was hit when it wasn't.
   | { type: "upgrade"; reason?: "proactive" }
-  | { type: "eleven" }
   | { type: "account"; accountType: AccountModalType }
   | { type: "whatsapp" }
   | { type: "tiktok" }
@@ -148,8 +146,6 @@ type WizardState = {
   isSubscribed: boolean;
   dailyVideoLimit: number | null;
   allowedDurations: readonly Duration[];
-  voiceCloned: boolean;
-  selectedVoiceName: string;
 
   // AI usage / own key
   hasOwnKey: boolean;
@@ -315,7 +311,6 @@ type WizardContextValue = WizardState & {
   buildProgress: { completed: number; total: number } | null;
   buildError: string | null;
 
-  connectEleven: (name: string) => void;
   saveWhatsapp: () => void;
 
   openModal: (m: ModalState) => void;
@@ -340,8 +335,6 @@ export function WizardProvider({
 }) {
   const router = useRouter();
   const [accountName, setAccountNameState] = useState(initialName);
-  const [voiceCloned, setVoiceCloned] = useState(false);
-  const [selectedVoiceName, setSelectedVoiceName] = useState("");
 
   const createdAtDate = new Date(createdAt);
   // Date.now() can't be read directly during render (impure) — a lazy useState
@@ -1235,11 +1228,6 @@ export function WizardProvider({
     watermarkPosition,
   ]);
 
-  const connectEleven = useCallback((name: string) => {
-    setVoiceCloned(true);
-    setSelectedVoiceName(name);
-  }, []);
-
   const saveWhatsapp = useCallback(() => {
     closeModal();
   }, [closeModal]);
@@ -1271,8 +1259,6 @@ export function WizardProvider({
       isSubscribed,
       dailyVideoLimit,
       allowedDurations,
-      voiceCloned,
-      selectedVoiceName,
       hasOwnKey,
       ownKeyProvider,
       savingKey,
@@ -1404,7 +1390,6 @@ export function WizardProvider({
       removeWatermark,
       setWatermarkPosition,
       confirmBuild,
-      connectEleven,
       saveWhatsapp,
       openModal,
       closeModal,
@@ -1416,8 +1401,6 @@ export function WizardProvider({
       isSubscribed,
       dailyVideoLimit,
       allowedDurations,
-      voiceCloned,
-      selectedVoiceName,
       hasOwnKey,
       ownKeyProvider,
       savingKey,
@@ -1523,7 +1506,6 @@ export function WizardProvider({
       removeWatermark,
       setWatermarkPosition,
       confirmBuild,
-      connectEleven,
       saveWhatsapp,
       openModal,
       closeModal,

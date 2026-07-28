@@ -138,35 +138,6 @@ export default function RoteirosPage() {
       )}
 
       <div className="flex items-center gap-2.5 mt-3 flex-wrap">
-        <Btn
-          className={
-            wizard.accessPhase !== "trial" && !wizard.isSubscribed
-              ? "opacity-55 hover:opacity-75 hover:border-[var(--gold)] hover:text-[var(--gold)]"
-              : ""
-          }
-          onClick={() =>
-            wizard.accessPhase !== "trial" && !wizard.isSubscribed
-              ? wizard.openUpgradeModal()
-              : wizard.openModal({ type: "eleven" })
-          }
-        >
-          <Icon name="plug" /> Conectar minha voz (ElevenLabs)
-        </Btn>
-        <span className="text-[13px] text-[var(--text-2)]">
-          {wizard.accessPhase !== "trial" && !wizard.isSubscribed ? (
-            <>
-              <Icon name="lock" /> Requer teste grátis ativo ou assinatura
-            </>
-          ) : wizard.voiceCloned ? (
-            <>
-              <Icon name="circle-check" className="text-[var(--teal)]" />{" "}
-              {wizard.selectedVoiceName ? `Voz conectada: ${wizard.selectedVoiceName}` : "Voz clonada ativa"}
-            </>
-          ) : null}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-2.5 mt-2 flex-wrap">
         <Btn onClick={() => router.push("/app/provedores")}>
           <Icon name="key" /> Provedores de IA
         </Btn>

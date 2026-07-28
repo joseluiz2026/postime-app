@@ -9,18 +9,16 @@ import type { LlmProvider } from "./generate-roteiros";
 // the Ken Burns render (photos + camera movement, ~zero AI cost) as the core
 // product instead of chasing paid-per-second AI video generation, which would
 // break the free tier's economics. See project memory if reconsidering this.
-export type ProviderCategory = "texto" | "voz";
+// Voice (2026-07-27) was also removed — narrating with AI voice is just a link to
+// elevenlabs.io on the Gravação page now (generate there, upload the MP3 here)
+// instead of a BYOK connection with no real function behind it.
+export type ProviderCategory = "texto";
 
 export const CATEGORY_META: Record<ProviderCategory, { label: string; icon: string; description: string }> = {
   texto: {
     label: "Texto",
     icon: "typography",
     description: "Gera os roteiros dos seus vídeos.",
-  },
-  voz: {
-    label: "Voz",
-    icon: "microphone-2",
-    description: "Narração e clonagem de voz.",
   },
 };
 
@@ -137,66 +135,6 @@ export const PROVIDERS: ProviderInfo[] = [
       "Clique em \"Create Key\", dê um nome e confirme.",
       "Copie a chave gerada.",
       "Volte ao POSTime e cole a chave em \"Conectar API\".",
-    ],
-  },
-
-  // ---- Voz (o fluxo de clonagem já existe no passo Roteiros, plano Pro — hoje é uma prévia sem chamada real à ElevenLabs) ----
-  {
-    id: "elevenlabs",
-    category: "voz",
-    name: "ElevenLabs",
-    description: "Clonagem de voz e narração realista — líder de mercado em voz por IA.",
-    tiers: ["freeCredits", "paid"],
-    difficulty: "Fácil",
-    setupTime: "~3 min",
-    recommended: true,
-    implemented: false,
-    notes: "No passo Roteiros já existe um fluxo \"Conectar minha voz (ElevenLabs)\" no plano Pro — ele ainda é uma prévia (não chama a API de verdade). A conexão real de chave vai migrar para cá quando estiver pronta.",
-    signupUrl: "https://elevenlabs.io/",
-    apiKeyUrl: "https://elevenlabs.io/app/settings/api-keys",
-    steps: [
-      "Acesse elevenlabs.io e crie uma conta.",
-      "Abra o Profile (canto inferior esquerdo) → \"API Keys\".",
-      "Copie a chave exibida (ou gere uma nova).",
-      "Guarde a chave — a clonagem de voz com sua própria conta usa esse valor.",
-    ],
-  },
-  {
-    id: "cartesia",
-    category: "voz",
-    name: "Cartesia",
-    description: "Voz por IA de baixa latência, focada em narração em tempo real.",
-    tiers: ["freeCredits", "paid"],
-    difficulty: "Fácil",
-    setupTime: "~3 min",
-    implemented: false,
-    notes: "Ainda não disponível no POSTime.",
-    signupUrl: "https://cartesia.ai/",
-    apiKeyUrl: "https://play.cartesia.ai/keys",
-    steps: [
-      "Acesse cartesia.ai e crie uma conta.",
-      "Abra o Playground → \"API Keys\".",
-      "Gere uma nova chave e copie o valor.",
-      "Guarde a chave para quando este recurso for lançado no POSTime.",
-    ],
-  },
-  {
-    id: "google-tts",
-    category: "voz",
-    name: "Google Text-to-Speech",
-    description: "Narração via Google Cloud, com vozes em português do Brasil.",
-    tiers: ["free", "paid"],
-    difficulty: "Média",
-    setupTime: "~8 min",
-    implemented: false,
-    notes: "Ainda não disponível no POSTime — configuração mais técnica (exige um projeto no Google Cloud).",
-    signupUrl: "https://cloud.google.com/text-to-speech",
-    apiKeyUrl: "https://console.cloud.google.com/apis/credentials",
-    steps: [
-      "Acesse o Google Cloud Console e crie um projeto.",
-      "Ative a API \"Cloud Text-to-Speech\".",
-      "Vá em \"Credenciais\" e crie uma chave de API.",
-      "Guarde a chave para quando este recurso for lançado no POSTime.",
     ],
   },
 ];

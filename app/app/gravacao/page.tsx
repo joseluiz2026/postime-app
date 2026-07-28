@@ -321,6 +321,18 @@ export default function GravacaoPage() {
                 setPhase("ready");
               }}
             />
+            <p className="text-[12px] text-[var(--text-3)] text-center mt-3 leading-relaxed">
+              Quer narrar com voz de IA? Gere o áudio em{" "}
+              <a
+                href="https://elevenlabs.io/text-to-speech"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[var(--gold)] hover:underline"
+              >
+                elevenlabs.io
+              </a>{" "}
+              e envie o MP3 aqui.
+            </p>
           </div>
         )}
 
