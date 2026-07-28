@@ -44,26 +44,34 @@ function readAudioDuration(blob: Blob): Promise<number | null> {
 
 /** Same idea as readAudioDuration, for a video File — checked client-side against
  * the 5/10/15/30s presets before spending upload bandwidth on a clip that'll just
- * get rejected server-side too (see app/api/account/video-clips). Some real-world
- * MP4s (missing faststart, unusual encoding) never fire loadedmetadata or onerror
- * at all in some browsers — confirmed this hangs indefinitely without a timeout,
- * which left the upload UI stuck forever with no error shown. */
+ * get rejected server-side too (see app/api/account/video-clips). Confirmed live
+ * that a detached `<video>` (never attached to the document, unlike the `<audio>`
+ * used for the equivalent check above) doesn't reliably fire loadedmetadata in
+ * Chrome — even for a normal, real-world clip — so this one gets attached
+ * (off-screen, muted) instead. A timeout still backstops it either way. */
 function readVideoDuration(file: File): Promise<number | null> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
     const video = document.createElement("video");
+    video.muted = true;
+    video.style.position = "fixed";
+    video.style.left = "-9999px";
+    video.style.width = "1px";
+    video.style.height = "1px";
     let settled = false;
     const cleanup = (result: number | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeoutId);
       URL.revokeObjectURL(url);
+      video.remove();
       resolve(result);
     };
     const timeoutId = setTimeout(() => cleanup(null), 8000);
     video.onloadedmetadata = () => cleanup(Number.isFinite(video.duration) ? video.duration : null);
     video.onerror = () => cleanup(null);
     video.src = url;
+    document.body.appendChild(video);
   });
 }
 
