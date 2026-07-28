@@ -61,6 +61,27 @@ function groupWords(words: string[], size: number): string[] {
   return out;
 }
 
+// The caption/title fonts (Poppins-Bold, Anton, Archivo Black — display/headline
+// weights, not full Unicode text faces) don't cover every typographic character an
+// LLM tends to output: Unicode HYPHEN/non-breaking hyphen/figure dash (distinct
+// code points from the plain ASCII "-") and most symbol/emoji ranges render as a
+// missing-glyph "tofu" box instead of the intended mark. Normalizing to characters
+// confirmed present in all three (checked against each font's cmap) avoids that
+// without touching the actual roteiro text stored elsewhere.
+const HYPHEN_VARIANTS = /[‐‑‒―]/g;
+const ARROW_RIGHT = /→/g;
+// U+2600-27BF: misc symbols + dingbats (includes ✓ ♥ ★); U+1F000-1FFFF: emoji
+// blocks; U+FE0F variation selector; U+200D zero-width joiner (emoji sequences).
+const SYMBOLS_AND_EMOJI = /[☀-➿\u{1f000}-\u{1ffff}️‍]/gu;
+
+export function sanitizeCaptionGlyphs(text: string): string {
+  return text
+    .replace(HYPHEN_VARIANTS, "-")
+    .replace(ARROW_RIGHT, "->")
+    .replace(SYMBOLS_AND_EMOJI, "")
+    .replace(/ {2,}/g, " ");
+}
+
 /**
  * Greedily wraps text into lines of at most `maxCharsPerLine` characters,
  * joined with `\n` (drawtext renders literal newlines in a textfile as
@@ -68,7 +89,7 @@ function groupWords(words: string[], size: number): string[] {
  * this, long captions run past the video's edges instead of breaking.
  */
 export function wrapCaptionText(text: string, maxCharsPerLine: number): string {
-  const words = text.trim().split(/\s+/).filter(Boolean);
+  const words = sanitizeCaptionGlyphs(text).trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return "";
 
   const lines: string[] = [];

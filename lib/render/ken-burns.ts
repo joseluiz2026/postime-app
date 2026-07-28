@@ -3,7 +3,7 @@ import path from "path";
 import { existsSync, statSync } from "fs";
 import { writeFile } from "fs/promises";
 import ffmpegStaticPath from "ffmpeg-static";
-import { buildCaptionSegments, escapeFilterPath, wrapCaptionText } from "./captions";
+import { buildCaptionSegments, escapeFilterPath, sanitizeCaptionGlyphs, wrapCaptionText } from "./captions";
 
 // ffmpeg-static's bundled Linux binary lacks libfreetype (no `drawtext` filter
 // support), so captions never actually burned in on Vercel even though
@@ -353,7 +353,7 @@ async function buildCaptionChain(opts: {
     const seg = segments[i];
     if (seg.end - seg.start < 0.02) continue;
 
-    const raw = cfg.uppercase ? segments[i].text.toUpperCase() : segments[i].text;
+    const raw = sanitizeCaptionGlyphs(cfg.uppercase ? segments[i].text.toUpperCase() : segments[i].text);
     const charWidthRatio = cfg.uppercase ? widthRatios.uppercase : widthRatios.normal;
     const maxCharsPerLine = Math.max(6, Math.floor(CAPTION_MAX_WIDTH_PX / (fontsize * charWidthRatio)));
     // Word mode already burns one word at a time, so there's nothing to wrap.
