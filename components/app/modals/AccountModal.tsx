@@ -7,6 +7,10 @@ import { useWizard } from "@/lib/wizard-context";
 import { createClient } from "@/lib/supabase/client";
 import { Btn, FieldLabel, ModalShell, TextArea, TextInput } from "../ui";
 
+// TEMP (2026-07-28): liberado pro Free testar o suporte por IA. Voltar pra `false`
+// (ou apagar essa flag) quando o teste acabar — reforça o gate real em app/api/support/chat.
+const TEMP_SUPPORT_CHAT_OPEN_TO_ALL = true;
+
 const TITLES: Record<string, { icon: string; title: string }> = {
   password: { icon: "lock", title: "Trocar senha" },
   report: { icon: "alert-triangle", title: "Relatar problema" },
@@ -218,7 +222,7 @@ function SupportBody() {
   const wizard = useWizard();
   const router = useRouter();
 
-  if (!wizard.isSubscribed) {
+  if (!wizard.isSubscribed && !TEMP_SUPPORT_CHAT_OPEN_TO_ALL) {
     return (
       <div>
         <p className="text-[13.5px] text-[var(--text-2)] leading-relaxed mb-3">

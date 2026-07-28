@@ -10,6 +10,10 @@ export const maxDuration = 60;
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_LENGTH = 4000;
 
+// TEMP (2026-07-28): liberado pro Free testar o suporte por IA. Voltar pra `false`
+// (ou apagar essa flag, junto com a do AccountModal) quando o teste acabar.
+const TEMP_SUPPORT_CHAT_OPEN_TO_ALL = true;
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -20,7 +24,7 @@ export async function POST(request: Request) {
   // Support chat is Pro-only regardless of trial/free phase — it runs on the
   // user's own key, but access to the feature itself is gated on subscription.
   const { data: subRow } = await supabase.from("subscriptions").select("status").eq("user_id", user.id).maybeSingle();
-  if (subRow?.status !== "active") {
+  if (subRow?.status !== "active" && !TEMP_SUPPORT_CHAT_OPEN_TO_ALL) {
     return NextResponse.json({ error: "pro_required" }, { status: 402 });
   }
 
