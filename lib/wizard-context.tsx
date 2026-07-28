@@ -44,15 +44,23 @@ function readAudioDuration(blob: Blob): Promise<number | null> {
 
 /** Same idea as readAudioDuration, for a video File — checked client-side against
  * the 5/10/15/30s presets before spending upload bandwidth on a clip that'll just
- * get rejected server-side too (see app/api/account/video-clips). */
+ * get rejected server-side too (see app/api/account/video-clips). Some real-world
+ * MP4s (missing faststart, unusual encoding) never fire loadedmetadata or onerror
+ * at all in some browsers — confirmed this hangs indefinitely without a timeout,
+ * which left the upload UI stuck forever with no error shown. */
 function readVideoDuration(file: File): Promise<number | null> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
     const video = document.createElement("video");
+    let settled = false;
     const cleanup = (result: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
       URL.revokeObjectURL(url);
       resolve(result);
     };
+    const timeoutId = setTimeout(() => cleanup(null), 8000);
     video.onloadedmetadata = () => cleanup(Number.isFinite(video.duration) ? video.duration : null);
     video.onerror = () => cleanup(null);
     video.src = url;
@@ -676,12 +684,13 @@ export function WizardProvider({
         return false;
       }
       const durationSeconds = await readVideoDuration(file);
-      if (
-        durationSeconds === null ||
-        !OWN_VIDEO_CLIP_ALLOWED_DURATIONS.some((d) => Math.abs(d - durationSeconds) <= OWN_VIDEO_CLIP_DURATION_TOLERANCE)
-      ) {
+      if (durationSeconds === null) {
+        setOwnVideoClipsError("Não foi possível ler esse vídeo. Tente outro arquivo ou outro formato (MP4 é o mais confiável).");
+        return false;
+      }
+      if (!OWN_VIDEO_CLIP_ALLOWED_DURATIONS.some((d) => Math.abs(d - durationSeconds) <= OWN_VIDEO_CLIP_DURATION_TOLERANCE)) {
         setOwnVideoClipsError(
-          `O clipe precisa ter ${OWN_VIDEO_CLIP_ALLOWED_DURATIONS.join(", ")} segundos de duração. Esse tem ${durationSeconds ? Math.round(durationSeconds) : "?"}s.`,
+          `O clipe precisa ter ${OWN_VIDEO_CLIP_ALLOWED_DURATIONS.join(", ")} segundos de duração. Esse tem ${Math.round(durationSeconds)}s.`,
         );
         return false;
       }
