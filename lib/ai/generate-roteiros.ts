@@ -34,7 +34,7 @@ const roteiroItemSchema = z.object({
     ),
 });
 
-function resolveModel(provider: LlmProvider, apiKey: string, modelOverride?: string) {
+export function resolveModel(provider: LlmProvider, apiKey: string, modelOverride?: string) {
   switch (provider) {
     case "google":
       return createGoogleGenerativeAI({ apiKey })(modelOverride || "gemini-3.5-flash");
