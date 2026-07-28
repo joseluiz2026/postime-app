@@ -229,17 +229,34 @@ function getCaptionFontPath(font?: string): string {
   return path.join(process.cwd(), "public", "fonts", file);
 }
 
+/** A "video" segment is a real user-uploaded clip (looped via -stream_loop -1 at the
+ * input level so it always has enough frames regardless of its own length) — it
+ * gets trimmed to the needed duration instead of zoompan'd, since it already has
+ * real motion. Everything downstream (xfade concat, captions, etc.) treats both
+ * kinds identically once they're labeled video streams. */
 function buildMultiImageChain(opts: {
   imageCount: number;
+  mediaTypes: ("image" | "video")[];
   duration: number;
   outroSeconds: number;
   fps: number;
   cfg: StyleRenderConfig;
 }): { lines: string[]; outLabel: string } {
-  const { imageCount: n, duration, outroSeconds, fps, cfg } = opts;
+  const { imageCount: n, mediaTypes, duration, outroSeconds, fps, cfg } = opts;
+  const typeAt = (i: number): "image" | "video" => mediaTypes[i] ?? "image";
 
   if (n <= 1) {
-    const frames = Math.max(1, Math.round((duration + outroSeconds) * fps));
+    const seconds = duration + outroSeconds;
+    if (typeAt(0) === "video") {
+      return {
+        lines: [
+          `[0:v]trim=0:${seconds.toFixed(3)},setpts=PTS-STARTPTS,` +
+            `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=${fps},setsar=1[base]`,
+        ],
+        outLabel: "base",
+      };
+    }
+    const frames = Math.max(1, Math.round(seconds * fps));
     return {
       lines: [
         `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
@@ -263,10 +280,18 @@ function buildMultiImageChain(opts: {
 
   const lines: string[] = [];
   for (let i = 0; i < n; i++) {
-    lines.push(
-      `[${i}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
-        `zoompan=z='min(zoom+${zoomRate},1.3)':d=${i === n - 1 ? lastFrames : frames}:s=1080x1920:fps=${fps}[img${i}]`,
-    );
+    const thisClipDur = i === n - 1 ? clipDur + outroSeconds : clipDur;
+    if (typeAt(i) === "video") {
+      lines.push(
+        `[${i}:v]trim=0:${thisClipDur.toFixed(3)},setpts=PTS-STARTPTS,` +
+          `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=${fps},setsar=1[img${i}]`,
+      );
+    } else {
+      lines.push(
+        `[${i}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
+          `zoompan=z='min(zoom+${zoomRate},1.3)':d=${i === n - 1 ? lastFrames : frames}:s=1080x1920:fps=${fps}[img${i}]`,
+      );
+    }
   }
 
   let cur = "img0";
@@ -486,6 +511,10 @@ async function buildOverlayCuesChain(opts: {
  */
 export async function renderKenBurnsVideo(opts: {
   imagePaths: string[];
+  // Parallel to imagePaths — "video" means that path is a real clip (trimmed to
+  // fit its segment, looped if shorter than needed) instead of a still zoompan'd.
+  // Omitted/shorter than imagePaths defaults every unlisted entry to "image".
+  mediaTypes?: ("image" | "video")[];
   audioPath?: string;
   outputPath: string;
   captionText?: string;
@@ -532,6 +561,7 @@ export async function renderKenBurnsVideo(opts: {
 
   const { lines: imageLines, outLabel: imagesOutLabel } = buildMultiImageChain({
     imageCount: opts.imagePaths.length,
+    mediaTypes: opts.mediaTypes ?? [],
     duration,
     outroSeconds,
     fps,
@@ -612,8 +642,16 @@ export async function renderKenBurnsVideo(opts: {
 
   const args: string[] = ["-y"];
   let nextInputIndex = 0;
-  for (const imagePath of opts.imagePaths) {
-    args.push("-loop", "1", "-i", imagePath);
+  for (let i = 0; i < opts.imagePaths.length; i++) {
+    const imagePath = opts.imagePaths[i];
+    if ((opts.mediaTypes?.[i] ?? "image") === "video") {
+      // Looped indefinitely (same technique as the music input below) so a clip
+      // shorter than the segment it's filling (plus crossfade/outro overlap) still
+      // has enough frames — trim= in the filter chain cuts it back down.
+      args.push("-stream_loop", "-1", "-i", imagePath);
+    } else {
+      args.push("-loop", "1", "-i", imagePath);
+    }
     nextInputIndex++;
   }
 

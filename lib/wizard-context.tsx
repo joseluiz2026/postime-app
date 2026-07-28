@@ -42,6 +42,35 @@ function readAudioDuration(blob: Blob): Promise<number | null> {
   });
 }
 
+/** Same idea as readAudioDuration, for a video File — checked client-side against
+ * the 5/10/15/30s presets before spending upload bandwidth on a clip that'll just
+ * get rejected server-side too (see app/api/account/video-clips). */
+function readVideoDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    const cleanup = (result: number | null) => {
+      URL.revokeObjectURL(url);
+      resolve(result);
+    };
+    video.onloadedmetadata = () => cleanup(Number.isFinite(video.duration) ? video.duration : null);
+    video.onerror = () => cleanup(null);
+    video.src = url;
+  });
+}
+
+const OWN_VIDEO_CLIP_ALLOWED_DURATIONS = [5, 10, 15, 30];
+const OWN_VIDEO_CLIP_DURATION_TOLERANCE = 0.75;
+
+export type OwnVideoClip = {
+  id: string;
+  name: string;
+  url?: string;
+  path: string;
+  durationSeconds: number;
+  expiresAt: string;
+};
+
 export type { Duration } from "./plan";
 export type SourceType = "ebook" | "texto" | "link" | "youtube" | "websearch";
 export type StyleName =
@@ -166,6 +195,9 @@ type WizardState = {
   ownImages: OwnImage[];
   ownImagesUploading: boolean;
   ownImagesError: string | null;
+  ownVideoClips: OwnVideoClip[];
+  ownVideoClipsUploading: boolean;
+  ownVideoClipsError: string | null;
 
   // roteiros
   duration: Duration;
@@ -246,6 +278,10 @@ type WizardContextValue = WizardState & {
   setWebsearch: (v: string) => void;
   addOwnImages: (files: FileList) => Promise<void>;
   removeOwnImage: (idx: number) => void;
+  loadVideoClips: () => Promise<void>;
+  uploadVideoClip: (file: File) => Promise<boolean>;
+  removeVideoClip: (id: string) => Promise<void>;
+  renewVideoClips: (id?: string) => Promise<void>;
   sourceLabel: () => string | null;
   assignedOwnImageUrls: () => Set<string>;
   neededSegmentsForTema: (idx: number) => number;
@@ -363,6 +399,9 @@ export function WizardProvider({
   const [ownImages, setOwnImages] = useState<OwnImage[]>([]);
   const [ownImagesUploading, setOwnImagesUploading] = useState(false);
   const [ownImagesError, setOwnImagesError] = useState<string | null>(null);
+  const [ownVideoClips, setOwnVideoClips] = useState<OwnVideoClip[]>([]);
+  const [ownVideoClipsUploading, setOwnVideoClipsUploading] = useState(false);
+  const [ownVideoClipsError, setOwnVideoClipsError] = useState<string | null>(null);
 
   const [duration, setDurationState] = useState<Duration>("15s");
   const [qty, setQtyState] = useState(3);
@@ -615,6 +654,85 @@ export function WizardProvider({
       }
       return prev.filter((_, i) => i !== idx);
     });
+  }, []);
+
+  const loadVideoClips = useCallback(async (): Promise<void> => {
+    try {
+      const res = await fetch("/api/account/video-clips");
+      if (!res.ok) return;
+      const data = await res.json();
+      setOwnVideoClips(Array.isArray(data.clips) ? data.clips : []);
+    } catch {
+      // best-effort — the picker just shows no clips if this fails
+    }
+  }, []);
+
+  const uploadVideoClip = useCallback(async (file: File): Promise<boolean> => {
+    setOwnVideoClipsUploading(true);
+    setOwnVideoClipsError(null);
+    try {
+      if (!file.type.startsWith("video/")) {
+        setOwnVideoClipsError("O arquivo precisa ser um vídeo.");
+        return false;
+      }
+      const durationSeconds = await readVideoDuration(file);
+      if (
+        durationSeconds === null ||
+        !OWN_VIDEO_CLIP_ALLOWED_DURATIONS.some((d) => Math.abs(d - durationSeconds) <= OWN_VIDEO_CLIP_DURATION_TOLERANCE)
+      ) {
+        setOwnVideoClipsError(
+          `O clipe precisa ter ${OWN_VIDEO_CLIP_ALLOWED_DURATIONS.join(", ")} segundos de duração. Esse tem ${durationSeconds ? Math.round(durationSeconds) : "?"}s.`,
+        );
+        return false;
+      }
+      const form = new FormData();
+      form.set("file", file);
+      form.set("durationSeconds", String(durationSeconds));
+      const res = await fetch("/api/account/video-clips", { method: "POST", body: form });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setOwnVideoClipsError(
+          data?.error === "file_too_large" ? "O arquivo é grande demais (máx. 30MB)." : "Não foi possível enviar o vídeo agora.",
+        );
+        return false;
+      }
+      const clip = await res.json();
+      setOwnVideoClips((prev) => [clip, ...prev]);
+      return true;
+    } catch {
+      setOwnVideoClipsError("Falha de conexão. Tente novamente.");
+      return false;
+    } finally {
+      setOwnVideoClipsUploading(false);
+    }
+  }, []);
+
+  const removeVideoClip = useCallback(async (id: string): Promise<void> => {
+    setOwnVideoClips((prev) => prev.filter((c) => c.id !== id));
+    try {
+      await fetch("/api/account/video-clips", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+    } catch {
+      // best-effort — already optimistically removed from the list
+    }
+  }, []);
+
+  const renewVideoClips = useCallback(async (id?: string): Promise<void> => {
+    try {
+      const res = await fetch("/api/account/video-clips", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(id ? { id } : {}),
+      });
+      if (!res.ok) return;
+      const { expiresAt } = await res.json();
+      setOwnVideoClips((prev) => prev.map((c) => (!id || c.id === id ? { ...c, expiresAt } : c)));
+    } catch {
+      // best-effort — the warning banner just stays up if this fails
+    }
   }, []);
 
   const uploadWatermark = useCallback(
@@ -1088,6 +1206,7 @@ export function WizardProvider({
 
       let dailyLimitHit = false;
       setBuildProgress({ completed: 0, total: indices.length });
+      const ownVideoClipUrls = new Set(ownVideoClips.map((c) => c.url).filter((u): u is string => !!u));
       // Rendered one at a time, not in parallel — concurrent ffmpeg jobs were
       // contending for the same limited server resources and causing renders
       // to fail; sequential requests are slower but reliable.
@@ -1115,6 +1234,9 @@ export function WizardProvider({
                 audioPath,
                 imageUrl: image.url,
                 ownImageUrls: imageAssignmentsByTema[i] ?? [],
+                ownMediaTypes: (imageAssignmentsByTema[i] ?? []).map((url) =>
+                  url && ownVideoClipUrls.has(url) ? "video" : "image",
+                ),
                 text: roteiros[i]?.text ?? "",
                 style: selectedStyle,
                 mood: (musicMoodByTema[i] ?? "auto") === "auto" ? roteiros[i]?.mood : musicMoodByTema[i],
@@ -1224,6 +1346,7 @@ export function WizardProvider({
     roteiros,
     audioPaths,
     imageAssignmentsByTema,
+    ownVideoClips,
     watermark,
     watermarkPosition,
   ]);
@@ -1275,6 +1398,9 @@ export function WizardProvider({
       ownImages,
       ownImagesUploading,
       ownImagesError,
+      ownVideoClips,
+      ownVideoClipsUploading,
+      ownVideoClipsError,
       duration,
       qty,
       roteiros,
@@ -1335,6 +1461,10 @@ export function WizardProvider({
       setWebsearch,
       addOwnImages,
       removeOwnImage,
+      loadVideoClips,
+      uploadVideoClip,
+      removeVideoClip,
+      renewVideoClips,
       sourceLabel,
       assignedOwnImageUrls,
       neededSegmentsForTema,
@@ -1417,6 +1547,9 @@ export function WizardProvider({
       ownImages,
       ownImagesUploading,
       ownImagesError,
+      ownVideoClips,
+      ownVideoClipsUploading,
+      ownVideoClipsError,
       duration,
       qty,
       roteiros,
@@ -1471,6 +1604,10 @@ export function WizardProvider({
       signOut,
       addOwnImages,
       removeOwnImage,
+      loadVideoClips,
+      uploadVideoClip,
+      removeVideoClip,
+      renewVideoClips,
       sourceLabel,
       assignedOwnImageUrls,
       neededSegmentsForTema,

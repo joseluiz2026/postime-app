@@ -60,7 +60,7 @@ function TemaPhotoPanel({ temaIndex }: { temaIndex: number }) {
     statusLabel = "Automático · bancos gratuitos";
     statusClass = "text-[var(--text-3)]";
   } else if (assignedCount >= needed) {
-    statusLabel = "Só suas fotos";
+    statusLabel = "Só seu material";
     statusClass = "text-[var(--teal)]";
   } else {
     statusLabel = `${assignedCount} de ${needed} suas · resto automático`;
@@ -105,11 +105,24 @@ function TemaPhotoPanel({ temaIndex }: { temaIndex: number }) {
                 className="shrink-0 max-w-[170px] bg-[var(--bg-1)] border-[0.5px] border-[var(--line)] rounded-[7px] text-[11.5px] text-[var(--text-1)] px-2 py-1.5 outline-none cursor-pointer hover:border-[var(--line-strong)] focus:border-[var(--gold)]"
               >
                 <option value="">Automático</option>
-                {wizard.ownImages.map((img) => (
-                  <option key={img.path} value={img.url}>
-                    {img.name}
-                  </option>
-                ))}
+                {wizard.ownImages.length > 0 && (
+                  <optgroup label="Fotos">
+                    {wizard.ownImages.map((img) => (
+                      <option key={img.path} value={img.url}>
+                        {img.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {wizard.ownVideoClips.length > 0 && (
+                  <optgroup label="Vídeos">
+                    {wizard.ownVideoClips.map((clip) => (
+                      <option key={clip.path} value={clip.url}>
+                        {clip.name} ({clip.durationSeconds}s)
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
           ))}
@@ -454,6 +467,49 @@ function formatVideoDuration(seconds?: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+const VIDEO_CLIP_WARNING_MINUTES = 5;
+
+/** Shows a dismiss-free warning once any clip is within 5 minutes of its 30-minute
+ * inactivity expiry, with a button that renews all of them at once. Ticks its own
+ * clock (the expiresAt timestamps don't change on their own) so the countdown and
+ * the warning's appearance/disappearance stay live without user action. */
+function VideoClipExpiryBanner() {
+  const wizard = useWizard();
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const soonest = wizard.ownVideoClips.reduce<number | null>((min, c) => {
+    const t = new Date(c.expiresAt).getTime();
+    return min === null || t < min ? t : min;
+  }, null);
+  if (soonest === null) return null;
+
+  const minutesLeft = Math.max(0, Math.ceil((soonest - now) / 60_000));
+  if (minutesLeft > VIDEO_CLIP_WARNING_MINUTES) return null;
+
+  return (
+    <div className="flex items-center gap-3 mt-4 px-4 py-3 rounded-xl bg-[color-mix(in_srgb,var(--gold)_10%,transparent)] border-[0.5px] border-[color-mix(in_srgb,var(--gold)_30%,transparent)]">
+      <Icon name="alert-triangle" className="text-[var(--gold)] shrink-0" />
+      <p className="flex-1 text-[12.5px] text-[var(--text-1)] leading-relaxed m-0">
+        {minutesLeft === 0
+          ? "Seus clipes de vídeo enviados vão expirar a qualquer momento por inatividade."
+          : `Seus clipes de vídeo enviados expiram em ${minutesLeft} ${minutesLeft === 1 ? "minuto" : "minutos"} por inatividade.`}
+      </p>
+      <button
+        type="button"
+        onClick={() => wizard.renewVideoClips()}
+        className="shrink-0 text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-br from-[var(--gold)] to-[var(--teal)] text-[#0B1220] border-none cursor-pointer whitespace-nowrap"
+      >
+        Renovar
+      </button>
+    </div>
+  );
+}
+
 export default function EstiloPage() {
   const wizard = useWizard();
   const router = useRouter();
@@ -463,6 +519,11 @@ export default function EstiloPage() {
   const [upsellDismissed, setUpsellDismissed] = useState(false);
   const sortedSelected = [...wizard.selectedForVideo].sort((a, b) => a - b);
   const assignedUrls = wizard.assignedOwnImageUrls();
+
+  useEffect(() => {
+    wizard.loadVideoClips();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const smoothProgressPct = useSmoothBuildProgress(
     wizard.buildingVideos,
     wizard.buildProgress?.completed ?? 0,
@@ -883,17 +944,83 @@ export default function EstiloPage() {
         )}
       </div>
 
-      {wizard.ownImages.length > 0 && n > 0 && (
+      <div className="mt-6 pt-6 border-t-2 border-[var(--line-strong)]">
+        <FieldLabel className="text-[15px] font-semibold text-[var(--text-1)]">
+          Vídeos próprios (opcional)
+          <HelpTip
+            label="Como funcionam os clipes próprios"
+            text={
+              <>
+                Envie clipes de <strong>5, 10, 15 ou 30 segundos</strong> — outras durações não são aceitas. Depois,
+                em &quot;Fotos por vídeo&quot;, escolha em qual cena cada clipe entra (pode misturar com fotos
+                própias ou automáticas). Clipes enviados ficam disponíveis por 30 minutos de inatividade e somem
+                depois disso.
+              </>
+            }
+          />
+        </FieldLabel>
+        <p className="text-[13px] text-[var(--text-2)] mb-4 leading-relaxed">
+          Seus próprios clipes de vídeo, em vez de foto parada, pras cenas do vídeo.
+        </p>
+        <Dropzone
+          icon="movie"
+          title={wizard.ownVideoClipsUploading ? "Enviando..." : "Clique para escolher ou arraste o vídeo aqui"}
+          subtitle="MP4 · 5, 10, 15 ou 30 segundos · até 30MB"
+          accept=".mp4,.mov,video/*"
+          onFiles={(files) => wizard.uploadVideoClip(files[0])}
+        />
+        {wizard.ownVideoClipsError && (
+          <p className="text-[13px] text-[var(--gold)] mt-3">
+            <Icon name="alert-triangle" /> {wizard.ownVideoClipsError}
+          </p>
+        )}
+        {wizard.ownVideoClips.length > 0 && (
+          <>
+            <VideoClipExpiryBanner />
+            <div className="flex flex-wrap gap-2 mt-4">
+              {wizard.ownVideoClips.map((clip) => (
+                <div
+                  key={clip.id}
+                  className={`flex items-center gap-2 bg-[var(--bg-2)] border-[0.5px] rounded-[9px] pl-2 pr-2 py-1.5 text-xs text-[var(--text-2)] max-w-[240px] ${
+                    assignedUrls.has(clip.url ?? "") ? "border-[var(--teal)]" : "border-[var(--line)]"
+                  }`}
+                >
+                  <Icon name="movie" className="text-[var(--text-3)] shrink-0" />
+                  <span className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px]" title={clip.name}>
+                    {clip.name} · {clip.durationSeconds}s
+                  </span>
+                  {assignedUrls.has(clip.url ?? "") && (
+                    <span className="text-[var(--teal)] text-[13px] shrink-0" title="Atribuído a pelo menos um vídeo">
+                      <Icon name="check" />
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    aria-label="Remover clipe"
+                    onClick={() => wizard.removeVideoClip(clip.id)}
+                    className="shrink-0 bg-transparent border-none text-[var(--text-3)] cursor-pointer text-sm leading-none flex hover:text-[var(--gold)]"
+                  >
+                    <Icon name="minus" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {(wizard.ownImages.length > 0 || wizard.ownVideoClips.length > 0) && n > 0 && (
         <div className="mt-6 pt-6 border-t-2 border-[var(--line-strong)]">
           <FieldLabel className="text-[15px] font-semibold text-[var(--text-1)]">
-            Fotos por vídeo
+            Fotos e vídeos por cena
             <HelpTip
               label="Como funciona"
               text={
                 <>
                   Cada vídeo é montado com várias cenas — abra um tema pra ver quantas e escolher qual das suas fotos
-                  entra em cada uma. Deixou algumas em &quot;Automático&quot;? Elas são preenchidas com fotos grátis.
-                  Atribuiu todas? O vídeo usa só suas fotos, sem buscar nada nos bancos gratuitos.
+                  ou clipes de vídeo entra em cada uma. Deixou alguma em &quot;Automático&quot;? Ela é preenchida com
+                  foto grátis do banco. Atribuiu todas? O vídeo usa só o seu material, sem buscar nada nos bancos
+                  gratuitos.
                 </>
               }
             />

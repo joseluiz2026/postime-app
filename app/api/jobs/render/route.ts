@@ -130,6 +130,11 @@ export async function POST(request: Request) {
   const ownImageUrls: (string | null)[] = Array.isArray(body?.ownImageUrls)
     ? body.ownImageUrls.map((v: unknown) => (typeof v === "string" && /^https:\/\//.test(v) ? v : null))
     : [];
+  // Parallel to ownImageUrls — "video" means that slot's URL is a real uploaded
+  // clip (see app/app/estilo's per-scene picker), not a still photo.
+  const ownMediaTypes: ("image" | "video")[] = Array.isArray(body?.ownMediaTypes)
+    ? body.ownMediaTypes.map((v: unknown) => (v === "video" ? "video" : "image"))
+    : [];
   const hasAudio = audioPath.length > 0;
   const hasWatermark = watermarkPath.length > 0;
   if (
@@ -185,9 +190,14 @@ export async function POST(request: Request) {
     // makes "só minhas fotos" possible with zero stock-provider calls); segments left
     // unassigned fall back to one auto-fetched stock photo per text chunk, same as before.
     const imageUrls: (string | null)[] = new Array(numSegments).fill(null);
+    const mediaTypes: ("image" | "video")[] = new Array(numSegments).fill("image");
     imageUrls[0] = ownImageUrls[0] || imageUrl;
+    mediaTypes[0] = ownImageUrls[0] ? (ownMediaTypes[0] ?? "image") : "image";
     for (let k = 1; k < numSegments; k++) {
-      if (ownImageUrls[k]) imageUrls[k] = ownImageUrls[k];
+      if (ownImageUrls[k]) {
+        imageUrls[k] = ownImageUrls[k];
+        mediaTypes[k] = ownMediaTypes[k] ?? "image";
+      }
     }
     const autoIndices = imageUrls.reduce<number[]>((acc, v, k) => {
       if (v === null) acc.push(k);
@@ -213,11 +223,12 @@ export async function POST(request: Request) {
 
     const imageFiles = await Promise.all(
       finalImageUrls.map(async (url, i) => {
-        const imgRes = await fetch(url);
-        if (!imgRes.ok) throw new Error("image_download_failed");
-        const imageFile = path.join(dir, `image${i}.jpg`);
-        await writeFile(imageFile, Buffer.from(await imgRes.arrayBuffer()));
-        return imageFile;
+        const mediaRes = await fetch(url);
+        if (!mediaRes.ok) throw new Error("image_download_failed");
+        const ext = mediaTypes[i] === "video" ? "mp4" : "jpg";
+        const mediaFile = path.join(dir, `image${i}.${ext}`);
+        await writeFile(mediaFile, Buffer.from(await mediaRes.arrayBuffer()));
+        return mediaFile;
       }),
     );
 
@@ -235,6 +246,7 @@ export async function POST(request: Request) {
     const outputFile = path.join(dir, "output.mp4");
     const durationSeconds = await renderKenBurnsVideo({
       imagePaths: imageFiles,
+      mediaTypes,
       audioPath: audioFile,
       outputPath: outputFile,
       durationSeconds: duration,
