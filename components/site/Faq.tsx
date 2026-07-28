@@ -12,7 +12,7 @@ const ITEMS = [
   },
   {
     q: "Preciso saber editar vídeo?",
-    a: "Não. O POSTime monta tudo sozinho — roteiro, narração, imagens e montagem.",
+    a: "Não. O POSTime monta tudo sozinho — roteiro, imagens e montagem. A narração é sua: grave, envie um áudio pronto, ou deixe só a legenda.",
   },
   {
     q: "Funciona só para TikTok?",
@@ -20,7 +20,7 @@ const ITEMS = [
   },
   {
     q: "Posso usar a minha própria voz?",
-    a: "Sim — grave direto no app ou envie um áudio pronto. Clonagem de voz com IA está a caminho.",
+    a: "Sim — grave direto no app ou envie um áudio pronto.",
   },
 ];
 

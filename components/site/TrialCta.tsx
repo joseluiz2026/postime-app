@@ -22,11 +22,11 @@ export function TrialCta() {
               {TRIAL_DAYS} dias por nossa conta.
             </h2>
             <p className="mt-3.5 text-base text-[var(--text-2)] leading-relaxed">
-              Cadastro simples, sem burocracia. Você já começa gerando vídeos no mesmo dia, sem limite de uso.
+              Cadastro simples, sem burocracia. Você já começa gerando vídeos no mesmo dia.
             </p>
             <div className="mt-5 font-mono text-[13px] text-[var(--text-1)] bg-[color-mix(in_srgb,var(--bg-0)_60%,transparent)] border-[0.5px] border-[var(--line-strong)] rounded-xl px-5 py-4">
-              Depois dos {TRIAL_DAYS} dias, assine pra continuar gerando roteiros, imagens, narração e vídeo sem
-              limite — não existe outro plano gratuito.
+              Depois dos {TRIAL_DAYS} dias, assine pra continuar gerando roteiros e vídeos sem limite — não existe
+              outro plano gratuito.
             </div>
             <SiteBtn href="/cadastro" large className="mt-8">
               Quero meus {TRIAL_DAYS} dias grátis

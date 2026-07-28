@@ -40,15 +40,15 @@ export async function Hero() {
         <div className="max-w-[600px]">
           <Eyebrow>Motor de conteúdo com IA</Eyebrow>
           <h1 className="font-[var(--font-display)] font-extrabold text-[56px] leading-[1.04] tracking-tight m-0 max-[640px]:text-[36px]">
-            Poste todo dia.
+            Crie vídeos virais em escala.
             <br />
             <span className="bg-gradient-to-br from-[var(--gold)] to-[var(--teal)] bg-clip-text text-transparent">
-              Sem gravar todo dia.
+              Com poucos cliques.
             </span>
           </h1>
           <p className="mt-6 text-lg max-w-[480px] text-[var(--text-2)] leading-relaxed">
-            Transforme qualquer PDF, tema ou vídeo em roteiros, narração e vídeos verticais prontos pra TikTok,
-            Instagram e YouTube — em minutos, com a sua própria voz.
+            Transforme qualquer PDF, tema ou vídeo em roteiros e vídeos verticais prontos pra TikTok, Instagram e
+            YouTube, em minutos.
           </p>
           <div className="mt-8 flex items-center gap-4 flex-wrap">
             <SiteBtn href="/cadastro" large>

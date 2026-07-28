@@ -3,11 +3,11 @@ import { TRIAL_DAYS } from "@/lib/plan";
 import { Eyebrow, SectionHead, SiteBtn } from "./ui";
 
 const FEATURES = [
-  { icon: "microphone", title: "Sua voz, sempre", desc: "Grave na hora, envie um MP3, ou clone sua voz com IA (em breve)." },
-  { icon: "photo", title: "Imagens automáticas", desc: "Busca sozinho em bancos gratuitos — ou use suas próprias fotos." },
+  { icon: "microphone", title: "Sua voz, sempre", desc: "Grave na hora ou envie um áudio pronto — ou deixe só a legenda." },
+  { icon: "photo", title: "Fotos e vídeos automáticos", desc: "Busca sozinho em bancos gratuitos — ou use suas próprias fotos e clipes." },
   { icon: "layout-grid", title: "6 estilos visuais", desc: "De minimalista a neon bold, escolha a cara do seu vídeo." },
   { icon: "brand-tiktok", title: "Pronto pra qualquer rede", desc: "Formato vertical, otimizado pra TikTok, Reels e Shorts." },
-  { icon: "bolt", title: "Modo automático", desc: "Um clique e o vídeo sai pronto, sem passar por nenhuma etapa manual." },
+  { icon: "bolt", title: "Tudo no automático", desc: "Fotos, estilo e roteiro prontos sem precisar configurar nada." },
   { icon: "lock", title: "Seus dados, sua conta", desc: "Conecte suas próprias chaves de API com segurança, quando quiser." },
 ];
 

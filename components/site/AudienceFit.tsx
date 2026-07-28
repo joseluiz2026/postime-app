@@ -16,7 +16,7 @@ const PROFILES = [
   {
     icon: "microphone",
     title: "Não sabe se quer aparecer",
-    desc: "Narre com a sua própria voz, clone ela com IA, ou deixe só a narração — você decide o quanto aparece.",
+    desc: "Narre com a sua própria voz, envie um áudio pronto, ou deixe só a legenda — você decide o quanto aparece.",
   },
 ];
 

@@ -20,9 +20,9 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ["400", "500"],
 });
 
-const title = "POSTime — Poste todo dia, sem gravar todo dia";
+const title = "POSTime — Crie vídeos virais em escala, com poucos cliques";
 const description =
-  "Transforme qualquer PDF, tema ou vídeo em roteiros, narração e vídeos verticais prontos pra TikTok, Instagram e YouTube — em minutos, com a sua própria voz.";
+  "Transforme qualquer PDF, tema ou vídeo em roteiros e vídeos verticais prontos pra TikTok, Instagram e YouTube, em minutos.";
 const siteUrl = "https://postime-app.vercel.app";
 
 export const metadata: Metadata = {
@@ -36,7 +36,6 @@ export const metadata: Metadata = {
     "gerador de vídeo com IA",
     "vídeo para TikTok e Instagram",
     "roteiro automático",
-    "narração com IA",
     "conteúdo diário",
     "Reels e Shorts",
   ],
