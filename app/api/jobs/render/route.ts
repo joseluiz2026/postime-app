@@ -70,12 +70,18 @@ export async function POST(request: Request) {
   if (dailyLimit !== null) {
     const now = new Date();
     const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+    // A render that's still "processando" after this long didn't just get
+    // slow — the route's maxDuration (60s) already killed it, and since a
+    // platform-level kill skips the catch block below, that row never gets
+    // marked "erro". Without this cutoff, a single stuck render would keep
+    // silently eating one of the user's few daily slots forever.
+    const staleProcessandoBefore = new Date(now.getTime() - 5 * 60_000).toISOString();
     const { count, error: countErr } = await supabase
       .from("jobs")
       .select("id", { count: "exact", head: true })
       .eq("user_id", user.id)
-      .in("status", ["processando", "pronto"])
-      .gte("created_at", startOfDay);
+      .gte("created_at", startOfDay)
+      .or(`status.eq.pronto,and(status.eq.processando,created_at.gte.${staleProcessandoBefore})`);
     if (!countErr && (count ?? 0) >= dailyLimit) {
       if (user.email) void sendLimitReachedEmailOnce(user.id, user.email);
       return NextResponse.json({ error: "daily_video_limit_reached", limit: dailyLimit }, { status: 429 });
@@ -249,32 +255,36 @@ export async function POST(request: Request) {
       }),
     );
 
-    const musicPath = await pickMusicTrack(mood);
-
-    let watermarkFile: string | undefined;
-    if (hasWatermark) {
-      const { data: wmBlob, error: wmErr } = await supabase.storage.from("postime-images").download(watermarkPath);
-      if (!wmErr && wmBlob) {
-        watermarkFile = path.join(dir, "watermark.png");
-        await writeFile(watermarkFile, Buffer.from(await wmBlob.arrayBuffer()));
-      }
-    }
-
     // Pro-only feature (see ALLOW_END_CARD_FOR_FREE_TESTING above for the
     // temporary testing exception) — gated here rather than in ken-burns.ts so
     // the renderer stays a dumb executor of whatever it's told to draw.
     const endCardEligible = hasActiveSubscription || ALLOW_END_CARD_FOR_FREE_TESTING;
     const showEndCard = endCardEnabledRequested && endCardEligible;
-    let endCardLogoFile: string | undefined;
-    if (showEndCard && hasEndCardLogo) {
-      const { data: logoBlob, error: logoErr } = await supabase.storage
-        .from("postime-images")
-        .download(endCardLogoPath);
-      if (!logoErr && logoBlob) {
-        endCardLogoFile = path.join(dir, "end-card-logo.png");
-        await writeFile(endCardLogoFile, Buffer.from(await logoBlob.arrayBuffer()));
-      }
-    }
+
+    // Independent of each other and of the image downloads above — run them
+    // concurrently rather than one-after-another, since every second here
+    // eats into the render route's tight 60s budget alongside ffmpeg itself.
+    const [musicPath, watermarkFile, endCardLogoFile] = await Promise.all([
+      pickMusicTrack(mood),
+      (async () => {
+        if (!hasWatermark) return undefined;
+        const { data: wmBlob, error: wmErr } = await supabase.storage.from("postime-images").download(watermarkPath);
+        if (wmErr || !wmBlob) return undefined;
+        const file = path.join(dir, "watermark.png");
+        await writeFile(file, Buffer.from(await wmBlob.arrayBuffer()));
+        return file;
+      })(),
+      (async () => {
+        if (!showEndCard || !hasEndCardLogo) return undefined;
+        const { data: logoBlob, error: logoErr } = await supabase.storage
+          .from("postime-images")
+          .download(endCardLogoPath);
+        if (logoErr || !logoBlob) return undefined;
+        const file = path.join(dir, "end-card-logo.png");
+        await writeFile(file, Buffer.from(await logoBlob.arrayBuffer()));
+        return file;
+      })(),
+    ]);
 
     const outputFile = path.join(dir, "output.mp4");
     const durationSeconds = await renderKenBurnsVideo({

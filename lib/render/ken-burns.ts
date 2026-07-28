@@ -763,8 +763,15 @@ export async function renderKenBurnsVideo(opts: {
           `fade=t=in:st=${cardStart.toFixed(3)}:d=${cardFadeDur.toFixed(3)}:alpha=1,` +
           `fade=t=out:st=${cardFadeOutStart.toFixed(3)}:d=${cardFadeDur.toFixed(3)}:alpha=1[endcardlogo]`,
       );
+      // enable=... matters here, not just cosmetically: without it, overlay
+      // alpha-blends this image into every frame of the *entire* video (even
+      // while invisible before cardStart), which was costly enough over a
+      // full-length render to blow past Vercel's 60s function timeout — jobs
+      // got killed mid-render and stuck in "processando" forever, since the
+      // route's catch block never runs on a hard platform kill.
       filterLines.push(
-        `[${outLabel}][endcardlogo]overlay=x=(main_w-overlay_w)/2:y=(main_h-overlay_h)/2-120[endcardimg]`,
+        `[${outLabel}][endcardlogo]overlay=x=(main_w-overlay_w)/2:y=(main_h-overlay_h)/2-120:` +
+          `enable='between(t,${cardStart.toFixed(3)},${cardEnd.toFixed(3)})'[endcardimg]`,
       );
       outLabel = "endcardimg";
     }
