@@ -52,6 +52,11 @@ export default function DownloadPage() {
     }
   }
 
+  function handleDelete(video: Video) {
+    if (!window.confirm("Excluir este vídeo? Essa ação não pode ser desfeita.")) return;
+    wizard.deleteVideo(video);
+  }
+
   return (
     <>
       <Card>
@@ -95,6 +100,11 @@ export default function DownloadPage() {
                 )}
                 <div className="p-3">
                   <div className="text-[12.5px] font-medium text-[var(--text-1)] mb-1 leading-snug">{video.title}</div>
+                  {video.caption && (
+                    <div className="text-[11px] text-[var(--text-2)] mb-1.5 leading-snug line-clamp-2">
+                      {video.caption}
+                    </div>
+                  )}
                   {video.hashtags && video.hashtags.length > 0 && (
                     <div className="text-[10.5px] text-[var(--text-3)] mb-3 truncate">
                       {video.hashtags
@@ -142,22 +152,42 @@ export default function DownloadPage() {
                           {copiedId === video.id ? "Copiado!" : "Copiar legenda + hashtags"}
                         </button>
                       )}
+                      <div className="flex gap-1.5 mt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleRegravar(video)}
+                          className="flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] border-[var(--line)] text-[var(--text-3)] bg-transparent transition-all hover:border-[var(--gold)] hover:text-[var(--gold)] cursor-pointer"
+                        >
+                          <Icon name="microphone" /> Regravar
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Excluir"
+                          onClick={() => handleDelete(video)}
+                          className="shrink-0 w-8 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] border-[var(--line)] text-[var(--text-3)] bg-transparent transition-all hover:border-[#ef4444] hover:text-[#ef4444] cursor-pointer"
+                        >
+                          <Icon name="trash" />
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex gap-1.5">
                       <button
                         type="button"
                         onClick={() => handleRegravar(video)}
-                        className="w-full mt-1.5 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] border-[var(--line)] text-[var(--text-3)] bg-transparent transition-all hover:border-[var(--gold)] hover:text-[var(--gold)] cursor-pointer"
+                        className="flex-1 min-w-0 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_14%,transparent)] border-[color-mix(in_srgb,var(--gold)_30%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_22%,transparent)] cursor-pointer"
                       >
                         <Icon name="microphone" /> Regravar
                       </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleRegravar(video)}
-                      className="w-full px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] bg-[color-mix(in_srgb,var(--gold)_14%,transparent)] border-[color-mix(in_srgb,var(--gold)_30%,transparent)] text-[var(--gold)] transition-all hover:bg-[color-mix(in_srgb,var(--gold)_22%,transparent)] cursor-pointer"
-                    >
-                      <Icon name="microphone" /> Regravar
-                    </button>
+                      <button
+                        type="button"
+                        aria-label="Excluir"
+                        onClick={() => handleDelete(video)}
+                        className="shrink-0 w-8 px-1.5 py-1.5 text-xs text-center rounded-[9px] border-[0.5px] border-[var(--line)] text-[var(--text-3)] bg-transparent transition-all hover:border-[#ef4444] hover:text-[#ef4444] cursor-pointer"
+                      >
+                        <Icon name="trash" />
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
