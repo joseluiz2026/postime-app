@@ -110,7 +110,11 @@ export type TextAlign = "left" | "center" | "right";
  * single overlay this replaced. */
 export type TextOverlayCue = { id: string; text: string; start: number; end: number };
 
-export type OwnImage = { name: string; url: string; path: string };
+// start/end (seconds from the top of the video) are an optional entry/exit
+// schedule for this photo, same units as title/subtitle cues — null means
+// "not scheduled", so the assignment stays purely the per-scene dropdown
+// pick (see TemaPhotoPanel) rather than this timeline.
+export type OwnImage = { name: string; url: string; path: string; start: number | null; end: number | null };
 export type Roteiro = {
   meta: string;
   text: string;
@@ -315,6 +319,7 @@ type WizardContextValue = WizardState & {
   setWebsearch: (v: string) => void;
   addOwnImages: (files: FileList) => Promise<void>;
   removeOwnImage: (idx: number) => void;
+  setOwnImageSchedule: (path: string, patch: { start?: number | null; end?: number | null }) => void;
   loadVideoClips: () => Promise<void>;
   uploadVideoClip: (file: File) => Promise<boolean>;
   removeVideoClip: (id: string) => Promise<void>;
@@ -673,7 +678,7 @@ export function WizardProvider({
           const { data: signed } = await supabase.storage
             .from("postime-images")
             .createSignedUrl(path, 60 * 60 * 24);
-          if (signed?.signedUrl) next.push({ name: file.name, url: signed.signedUrl, path });
+          if (signed?.signedUrl) next.push({ name: file.name, url: signed.signedUrl, path, start: null, end: null });
         }
         if (next.length < imageFiles.length) {
           setOwnImagesError("Algumas imagens não puderam ser enviadas. Tente novamente.");
@@ -700,6 +705,10 @@ export function WizardProvider({
       }
       return prev.filter((_, i) => i !== idx);
     });
+  }, []);
+
+  const setOwnImageSchedule = useCallback((path: string, patch: { start?: number | null; end?: number | null }) => {
+    setOwnImages((prev) => prev.map((img) => (img.path === path ? { ...img, ...patch } : img)));
   }, []);
 
   const loadVideoClips = useCallback(async (): Promise<void> => {
@@ -1587,6 +1596,7 @@ export function WizardProvider({
       setWebsearch,
       addOwnImages,
       removeOwnImage,
+      setOwnImageSchedule,
       loadVideoClips,
       uploadVideoClip,
       removeVideoClip,
@@ -1739,6 +1749,7 @@ export function WizardProvider({
       signOut,
       addOwnImages,
       removeOwnImage,
+      setOwnImageSchedule,
       loadVideoClips,
       uploadVideoClip,
       removeVideoClip,

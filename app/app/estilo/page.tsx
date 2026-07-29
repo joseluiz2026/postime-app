@@ -912,34 +912,101 @@ export default function EstiloPage() {
           </p>
         )}
         {wizard.ownImages.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-4">
-            {wizard.ownImages.map((img, idx) => (
-              <div
-                key={img.path}
-                className={`flex items-center gap-2 bg-[var(--bg-2)] border-[0.5px] rounded-[9px] pl-1.5 pr-2 py-1.5 text-xs text-[var(--text-2)] max-w-[220px] ${
-                  assignedUrls.has(img.url) ? "border-[var(--teal)]" : "border-[var(--line)]"
-                }`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={img.url} alt="" className="w-7 h-7 object-cover rounded-md shrink-0" />
-                <span className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px]" title={img.name}>
-                  {img.name}
-                </span>
-                {assignedUrls.has(img.url) && (
-                  <span className="text-[var(--teal)] text-[13px] shrink-0" title="Atribuída a pelo menos um vídeo">
-                    <Icon name="check" />
-                  </span>
-                )}
-                <button
-                  type="button"
-                  aria-label="Remover imagem"
-                  onClick={() => wizard.removeOwnImage(idx)}
-                  className="shrink-0 bg-transparent border-none text-[var(--text-3)] cursor-pointer text-sm leading-none flex hover:text-[var(--gold)]"
-                >
-                  <Icon name="minus" />
-                </button>
-              </div>
-            ))}
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <th className="text-left text-[11px] font-medium text-[var(--text-3)] pb-2">Foto</th>
+                  <th className="text-left text-[11px] font-medium text-[var(--text-3)] pb-2">Entrada</th>
+                  <th className="text-left text-[11px] font-medium text-[var(--text-3)] pb-2">Saída</th>
+                  <th className="pb-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {wizard.ownImages.map((img, idx) => (
+                  <tr key={img.path} className="border-t-[0.5px] border-[var(--line)]">
+                    <td className="py-2 pr-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={img.url} alt="" className="w-9 h-9 object-cover rounded-md shrink-0" />
+                        <span
+                          className="text-[12px] text-[var(--text-2)] font-mono overflow-hidden text-ellipsis whitespace-nowrap max-w-[140px]"
+                          title={img.name}
+                        >
+                          {img.name}
+                        </span>
+                        {assignedUrls.has(img.url) && (
+                          <span className="text-[var(--teal)] text-[13px] shrink-0" title="Atribuída a pelo menos um vídeo">
+                            <Icon name="check" />
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.5}
+                          value={img.start ?? ""}
+                          placeholder="—"
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                              wizard.setOwnImageSchedule(img.path, { start: null });
+                              return;
+                            }
+                            const start = Math.max(0, Number(raw) || 0);
+                            wizard.setOwnImageSchedule(img.path, {
+                              start,
+                              end: img.end !== null && img.end < start + 0.5 ? start + 0.5 : img.end,
+                            });
+                          }}
+                          className="w-16 bg-[var(--bg-1)] border-[0.5px] border-[var(--line)] rounded-[7px] text-[11.5px] text-[var(--text-1)] px-2 py-1.5 outline-none hover:border-[var(--line-strong)] focus:border-[var(--gold)]"
+                        />
+                        <span className="text-[10.5px] text-[var(--text-3)]">s</span>
+                      </div>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <input
+                          type="number"
+                          min={(img.start ?? 0) + 0.5}
+                          step={0.5}
+                          value={img.end ?? ""}
+                          placeholder="—"
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                              wizard.setOwnImageSchedule(img.path, { end: null });
+                              return;
+                            }
+                            const min = (img.start ?? 0) + 0.5;
+                            wizard.setOwnImageSchedule(img.path, { end: Math.max(min, Number(raw) || min) });
+                          }}
+                          className="w-16 bg-[var(--bg-1)] border-[0.5px] border-[var(--line)] rounded-[7px] text-[11.5px] text-[var(--text-1)] px-2 py-1.5 outline-none hover:border-[var(--line-strong)] focus:border-[var(--gold)]"
+                        />
+                        <span className="text-[10.5px] text-[var(--text-3)]">s</span>
+                      </div>
+                    </td>
+                    <td className="py-2">
+                      <button
+                        type="button"
+                        aria-label="Remover imagem"
+                        onClick={() => wizard.removeOwnImage(idx)}
+                        className="shrink-0 bg-transparent border-none text-[var(--text-3)] cursor-pointer text-sm leading-none flex hover:text-[var(--gold)]"
+                      >
+                        <Icon name="minus" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[11.5px] text-[var(--text-3)] mt-2">
+              Deixe entrada/saída em branco pra não fixar horário — nesse caso a foto só entra se você atribuí-la
+              manualmente em &quot;Fotos por vídeo&quot;, mais abaixo.
+            </p>
           </div>
         )}
       </div>
