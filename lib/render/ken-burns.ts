@@ -878,12 +878,15 @@ export async function renderKenBurnsVideo(opts: {
     "libx264",
     // Default "medium" preset was too slow for Vercel's shared serverless CPU —
     // renders were blowing past the 60s function timeout even for a single,
-    // non-concurrent video. "veryfast" trades some compression efficiency
-    // (slightly bigger file) for a large encode-speed win; output is short-form
-    // vertical video that gets re-compressed by TikTok/social platforms anyway,
-    // so the quality tradeoff is not visually meaningful.
+    // non-concurrent video. Went past "veryfast" to "ultrafast" after a render
+    // (with own-photo scheduling, which fragments the filter graph into more
+    // segments) landed at 60.6s — over the limit even at "veryfast". Output is
+    // short-form vertical video that gets re-compressed by TikTok/social
+    // platforms anyway, so the extra quality tradeoff isn't visually meaningful,
+    // and the encode-speed margin is what keeps renders from silently vanishing
+    // client-side when they graze the timeout.
     "-preset",
-    "veryfast",
+    "ultrafast",
     "-pix_fmt",
     "yuv420p",
     "-c:a",

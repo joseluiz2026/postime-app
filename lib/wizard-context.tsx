@@ -140,6 +140,7 @@ export type Video = {
   durationSeconds?: number;
   caption?: string;
   hashtags?: string[];
+  createdAt?: string;
 };
 
 export type ModalId =
@@ -1390,6 +1391,10 @@ export function WizardProvider({
         const result = await (async (): Promise<Omit<Video, "id">> => {
           const audioPath = audioPaths[i];
           if (!image?.url || dailyLimitHit) return base;
+          // Captured before the render call so the recovery check below (used when the
+          // request itself drops) only matches a job created by *this* attempt, not a
+          // stale one from an earlier try at the same tema.
+          const attemptStartedAt = new Date().toISOString();
           try {
             const renderRes = await fetch("/api/jobs/render", {
               method: "POST",
@@ -1465,6 +1470,43 @@ export function WizardProvider({
               durationSeconds: renderData.durationSeconds,
             };
           } catch {
+            // The fetch itself failed (dropped connection, client-side timeout) —
+            // this does NOT mean the render failed: the render route runs the
+            // whole ffmpeg job before responding, so a render that finishes right
+            // around the platform's ~60s ceiling can complete and get marked
+            // "pronto" in the database even though the response never made it
+            // back to the browser. Before giving up and prompting "regravar" (which
+            // would burn another render for a video that already exists), check
+            // job history a couple of times — it lists this account's finished
+            // videos regardless of which request created them.
+            for (const delayMs of [2000, 4000]) {
+              await new Promise((r) => setTimeout(r, delayMs));
+              try {
+                const historyRes = await fetch("/api/jobs/render");
+                if (!historyRes.ok) continue;
+                const { videos: history } = await historyRes.json();
+                const recovered = Array.isArray(history)
+                  ? history.find(
+                      (v: Video) =>
+                        v.temaIndex === i &&
+                        v.videoUrl &&
+                        v.createdAt &&
+                        v.createdAt >= attemptStartedAt,
+                    )
+                  : null;
+                if (recovered) {
+                  return {
+                    ...base,
+                    videoUrl: recovered.videoUrl,
+                    videoPath: recovered.videoPath,
+                    expiresAt: recovered.expiresAt,
+                    durationSeconds: recovered.durationSeconds,
+                  };
+                }
+              } catch {
+                // keep waiting for the next attempt
+              }
+            }
             return base;
           }
         })();

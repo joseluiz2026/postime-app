@@ -508,6 +508,10 @@ export async function GET() {
   const { data: jobs, error } = await supabase
     .from("jobs")
     .select("id, title, caption, hashtags, tema_index, image_url, video_url, duration_seconds, created_at")
+    // NOTE: created_at is also returned to the client below (as createdAt) so a
+    // failed/dropped render request can tell "this job" apart from an older
+    // "pronto" job for the same tema when recovering a lost response — see
+    // wizard-context.tsx's render catch block.
     .eq("user_id", user.id)
     .eq("status", "pronto")
     .not("video_url", "is", null)
@@ -531,6 +535,7 @@ export async function GET() {
         videoPath: job.video_url as string,
         durationSeconds: job.duration_seconds ?? undefined,
         expiresAt: new Date(Date.now() + VIDEO_TTL_SECONDS * 1000).toISOString(),
+        createdAt: job.created_at as string,
       };
     }),
   );
