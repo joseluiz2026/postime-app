@@ -428,6 +428,80 @@ const STYLES: { name: StyleName; desc: string; preview: React.ReactNode }[] = [
       </>
     ),
   },
+  {
+    name: "Zoom Out Cinético",
+    desc: "Começa no detalhe e revela a cena inteira",
+    preview: (
+      <>
+        <rect width="44" height="78" fill="var(--bg-3)" />
+        <circle cx="22" cy="39" r="8" fill="none" stroke="var(--gold)" strokeWidth="1.5" opacity="0.9" />
+        <circle cx="22" cy="39" r="16" fill="none" stroke="var(--gold)" strokeWidth="1.2" opacity="0.5" />
+        <circle cx="22" cy="39" r="24" fill="none" stroke="var(--gold)" strokeWidth="1" opacity="0.25" />
+      </>
+    ),
+  },
+  {
+    name: "Deslize Vertical",
+    desc: "Cenas sobem em sequência, ritmo fluido",
+    preview: (
+      <>
+        <rect width="44" height="78" fill="var(--bg-3)" />
+        <rect x="8" y="52" width="28" height="18" rx="2" fill="var(--teal)" opacity="0.3" />
+        <rect x="8" y="30" width="28" height="18" rx="2" fill="var(--teal)" opacity="0.6" />
+        <rect x="8" y="8" width="28" height="18" rx="2" fill="var(--teal)" opacity="0.95" />
+      </>
+    ),
+  },
+  {
+    name: "Revelação Circular",
+    desc: "Cada cena se revela em um círculo crescente",
+    preview: (
+      <>
+        <rect width="44" height="78" fill="var(--bg-3)" />
+        <circle cx="22" cy="39" r="20" fill="var(--teal)" opacity="0.85" />
+        <rect x="9" y="34" width="26" height="7" rx="1.5" fill="#0B0B0B" />
+      </>
+    ),
+  },
+  {
+    name: "Glitch Urbano",
+    desc: "Cortes rápidos e pixelizados, energia de rua",
+    preview: (
+      <>
+        <rect width="44" height="78" fill="var(--bg-3)" />
+        <rect x="4" y="26" width="10" height="8" fill="var(--gold)" opacity="0.9" />
+        <rect x="16" y="26" width="10" height="8" fill="var(--text-1)" opacity="0.5" />
+        <rect x="28" y="26" width="10" height="8" fill="var(--teal)" opacity="0.7" />
+        <rect x="10" y="42" width="10" height="8" fill="var(--teal)" opacity="0.6" />
+        <rect x="22" y="42" width="10" height="8" fill="var(--gold)" opacity="0.4" />
+      </>
+    ),
+  },
+  {
+    name: "Dissolver Sonhador",
+    desc: "Transições suaves tipo dissolve, clima etéreo",
+    preview: (
+      <>
+        <rect width="44" height="78" fill="var(--bg-3)" />
+        <rect x="0" y="0" width="44" height="10" fill="#0B0B0B" />
+        <rect x="0" y="68" width="44" height="10" fill="#0B0B0B" />
+        <circle cx="22" cy="39" r="14" fill="var(--text-1)" opacity="0.18" />
+        <circle cx="22" cy="39" r="8" fill="var(--text-1)" opacity="0.3" />
+      </>
+    ),
+  },
+  {
+    name: "Corte Diagonal",
+    desc: "Transições diagonais, energia jovem e ousada",
+    preview: (
+      <>
+        <rect width="44" height="78" fill="var(--bg-3)" />
+        <path d="M0 0 L44 0 L0 40 Z" fill="var(--gold)" opacity="0.4" />
+        <path d="M44 78 L0 78 L44 38 Z" fill="var(--teal)" opacity="0.4" />
+        <rect x="10" y="55" width="16" height="3" rx="1.5" fill="var(--text-1)" />
+      </>
+    ),
+  },
 ];
 
 /**
@@ -549,13 +623,13 @@ export default function EstiloPage() {
           : `${n} roteiro${n === 1 ? "" : "s"} selecionado${n === 1 ? "" : "s"} para montagem.`}
       </p>
 
-      <div className="grid grid-cols-3 gap-2.5 max-[720px]:grid-cols-2 max-[420px]:grid-cols-1">
+      <div className="grid grid-cols-5 gap-2 max-[900px]:grid-cols-4 max-[720px]:grid-cols-3 max-[480px]:grid-cols-2">
         {STYLES.map((s) => (
           <button
             key={s.name}
             type="button"
             onClick={() => wizard.setSelectedStyle(s.name)}
-            className={`flex flex-col items-start gap-2 text-left p-3.5 pb-4 border-[0.5px] rounded-xl bg-[var(--bg-2)] text-[var(--text-2)] cursor-pointer transition-all font-sans ${
+            className={`flex flex-col items-start gap-1.5 text-left p-2 border-[0.5px] rounded-lg bg-[var(--bg-2)] text-[var(--text-2)] cursor-pointer transition-all font-sans ${
               wizard.selectedStyle === s.name
                 ? "border-[var(--gold)] bg-[color-mix(in_srgb,var(--gold)_6%,transparent)]"
                 : "border-[var(--line)] hover:border-[var(--line-strong)]"
@@ -563,8 +637,8 @@ export default function EstiloPage() {
           >
             <svg
               viewBox="0 0 44 78"
-              width="44"
-              height="78"
+              width="32"
+              height="56"
               aria-hidden="true"
               className={`rounded-md overflow-hidden shrink-0 border-[0.5px] ${
                 wizard.selectedStyle === s.name ? "border-[var(--gold)]" : "border-[var(--line-strong)]"
@@ -572,8 +646,8 @@ export default function EstiloPage() {
             >
               {s.preview}
             </svg>
-            <span className="text-[13.5px] font-semibold text-[var(--text-1)]">{s.name}</span>
-            <span className="text-[11.5px] text-[var(--text-3)] leading-snug">{s.desc}</span>
+            <span className="text-[11.5px] font-semibold text-[var(--text-1)] leading-tight">{s.name}</span>
+            <span className="text-[10px] text-[var(--text-3)] leading-snug">{s.desc}</span>
           </button>
         ))}
       </div>
@@ -1098,7 +1172,7 @@ export default function EstiloPage() {
           Card final de assinatura (Pro)
           <HelpTip
             label="Como funciona o card final"
-            text="Depois do vídeo escurecer no final, sua logo e uma chamada para assinar aparecem por alguns segundos (fade in e fade out) antes do vídeo acabar. Recurso do plano Pro."
+            text="Depois do vídeo escurecer no final, sua logo e uma chamada para assinar aparecem por alguns segundos (fade in e fade out) antes do vídeo acabar. A logo cabe numa área de até 600x300px — quadrada, redonda, oval ou retangular, contanto que caiba nesse espaço com fundo transparente. Recurso do plano Pro."
           />
         </FieldLabel>
         <p className="text-[13px] text-[var(--text-2)] mb-4 leading-relaxed">
@@ -1118,7 +1192,7 @@ export default function EstiloPage() {
               <Dropzone
                 icon="photo"
                 title={wizard.endCardLogoUploading ? "Enviando..." : "Clique para escolher um PNG transparente"}
-                subtitle="PNG com fundo transparente · mín. 320x320px · até 5MB"
+                subtitle="PNG com fundo transparente · até 600x300px, qualquer formato · até 5MB"
                 accept=".png,image/png"
                 onFiles={(files) => wizard.uploadEndCardLogo(files[0])}
               />

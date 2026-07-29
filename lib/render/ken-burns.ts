@@ -55,6 +55,13 @@ type StyleRenderConfig = {
   uppercase: boolean;
   transition: string;
   transitionDur: number;
+  // Ken Burns speed and direction — "in" pushes slowly into the frame (the
+  // original, only behavior), "out" starts pushed in and eases back out,
+  // which reads as "revealing" the full scene. Rate is per-frame zoom delta
+  // for the multi-segment path; the single-segment path (one image fills the
+  // whole video) scales it down to keep that path's historically slower feel.
+  zoomRate: number;
+  zoomDirection: "in" | "out";
 };
 
 const DEFAULT_STYLE = "Minimalista";
@@ -122,7 +129,12 @@ const OUTRO_FADE_SECONDS = 2;
 // in the API route, not here.
 const OUTRO_CARD_SECONDS = 4;
 const END_CARD_TRANSITION_SECONDS = 0.6;
-const END_CARD_LOGO_WIDTH = 320;
+// Bounding box the end-card logo is fit into (never cropped, never stretched)
+// — matches the 600x300 upload guidance so square, round, oval, or rectangular
+// logos all land at a consistent on-screen scale instead of a tall/narrow logo
+// rendering unexpectedly huge under a width-only scale.
+const END_CARD_LOGO_MAX_WIDTH = 320;
+const END_CARD_LOGO_MAX_HEIGHT = 160;
 // Used only when the end card is enabled but the caller left the CTA text
 // blank — placeholder copy, swap for real branding whenever available.
 const DEFAULT_END_CARD_TEXT = "Assine o app e crie o seu vídeo agora";
@@ -168,6 +180,8 @@ const STYLE_CONFIGS: Record<string, StyleRenderConfig> = {
     uppercase: false,
     transition: "fade",
     transitionDur: 0.4,
+    zoomRate: 0.004,
+    zoomDirection: "in",
   },
   "Dinâmico": {
     mode: "phrase",
@@ -182,6 +196,8 @@ const STYLE_CONFIGS: Record<string, StyleRenderConfig> = {
     uppercase: false,
     transition: "slideleft",
     transitionDur: 0.3,
+    zoomRate: 0.004,
+    zoomDirection: "in",
   },
   "Cinematográfico": {
     mode: "phrase",
@@ -196,6 +212,8 @@ const STYLE_CONFIGS: Record<string, StyleRenderConfig> = {
     uppercase: false,
     transition: "fade",
     transitionDur: 0.6,
+    zoomRate: 0.004,
+    zoomDirection: "in",
   },
   "Neon Bold": {
     mode: "phrase",
@@ -210,6 +228,8 @@ const STYLE_CONFIGS: Record<string, StyleRenderConfig> = {
     uppercase: true,
     transition: "circleopen",
     transitionDur: 0.4,
+    zoomRate: 0.004,
+    zoomDirection: "in",
   },
   "Kinetic Text": {
     mode: "word",
@@ -224,6 +244,8 @@ const STYLE_CONFIGS: Record<string, StyleRenderConfig> = {
     uppercase: false,
     transition: "fade",
     transitionDur: 0.25,
+    zoomRate: 0.004,
+    zoomDirection: "in",
   },
   "Split Screen": {
     mode: "phrase",
@@ -238,8 +260,115 @@ const STYLE_CONFIGS: Record<string, StyleRenderConfig> = {
     uppercase: false,
     transition: "wipeup",
     transitionDur: 0.4,
+    zoomRate: 0.004,
+    zoomDirection: "in",
+  },
+  "Zoom Out Cinético": {
+    mode: "phrase",
+    fontsize: 50,
+    fontcolor: "white",
+    y: "h-260",
+    box: true,
+    boxcolor: "black@0.4",
+    boxborderw: 20,
+    rise: 0,
+    letterbox: false,
+    uppercase: false,
+    transition: "smoothleft",
+    transitionDur: 0.4,
+    zoomRate: 0.006,
+    zoomDirection: "out",
+  },
+  "Deslize Vertical": {
+    mode: "phrase",
+    fontsize: 56,
+    fontcolor: "white",
+    y: "h-290",
+    box: true,
+    boxcolor: "black@0.4",
+    boxborderw: 22,
+    rise: 10,
+    letterbox: false,
+    uppercase: false,
+    transition: "slideup",
+    transitionDur: 0.35,
+    zoomRate: 0.0035,
+    zoomDirection: "in",
+  },
+  "Revelação Circular": {
+    mode: "phrase",
+    fontsize: 58,
+    fontcolor: "0x0B0B0B",
+    y: "h-300",
+    box: true,
+    boxcolor: "0x2DD4BF@0.85",
+    boxborderw: 24,
+    rise: 0,
+    letterbox: false,
+    uppercase: false,
+    transition: "circleclose",
+    transitionDur: 0.45,
+    zoomRate: 0.004,
+    zoomDirection: "in",
+  },
+  "Glitch Urbano": {
+    mode: "word",
+    fontsize: 78,
+    fontcolor: "white",
+    y: "(h-text_h)/2",
+    box: false,
+    boxcolor: "black@0",
+    boxborderw: 0,
+    rise: 24,
+    letterbox: false,
+    uppercase: true,
+    transition: "pixelize",
+    transitionDur: 0.2,
+    zoomRate: 0.007,
+    zoomDirection: "in",
+  },
+  "Dissolver Sonhador": {
+    mode: "phrase",
+    fontsize: 46,
+    fontcolor: "0xE8E8E8",
+    y: "h-120",
+    box: false,
+    boxcolor: "black@0",
+    boxborderw: 0,
+    rise: 0,
+    letterbox: true,
+    uppercase: false,
+    transition: "dissolve",
+    transitionDur: 0.7,
+    zoomRate: 0.0025,
+    zoomDirection: "out",
+  },
+  "Corte Diagonal": {
+    mode: "phrase",
+    fontsize: 60,
+    fontcolor: "white",
+    y: "h-290",
+    box: true,
+    boxcolor: "black@0.45",
+    boxborderw: 22,
+    rise: 14,
+    letterbox: false,
+    uppercase: false,
+    transition: "diagtl",
+    transitionDur: 0.35,
+    zoomRate: 0.005,
+    zoomDirection: "in",
   },
 };
+
+/** Builds the zoompan filter's `z=` expression for one style's Ken Burns
+ * motion: "in" eases from 1.0 up toward 1.3 (the original, only behavior);
+ * "out" starts already at 1.3 and eases back down to 1.0, reading as the
+ * shot pulling back to reveal the full scene. `rate` is the per-frame zoom
+ * delta — larger values push/pull faster. */
+function zoompanExpr(direction: "in" | "out", rate: number): string {
+  return direction === "out" ? `if(eq(on,1),1.3,max(zoom-${rate},1.0))` : `min(zoom+${rate},1.3)`;
+}
 
 function getCaptionFontPath(font?: string): string {
   const file = (font && CAPTION_FONT_FILES[font]) || CAPTION_FONT_FILES.poppins;
@@ -278,10 +407,14 @@ function buildMultiImageChain(opts: {
       };
     }
     const frames = Math.max(1, Math.round(seconds * fps));
+    // Scaled down from the per-segment rate below (by the original 0.0015/0.004
+    // ratio) — a single image fills the whole video, so the same raw rate would
+    // zoom far more than intended over that much longer duration.
+    const soloRate = cfg.zoomRate * 0.375;
     return {
       lines: [
         `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
-          `zoompan=z='min(zoom+0.0015,1.3)':d=${frames}:s=1080x1920:fps=${fps}[base]`,
+          `zoompan=z='${zoompanExpr(cfg.zoomDirection, soloRate)}':d=${frames}:s=1080x1920:fps=${fps}[base]`,
       ],
       outLabel: "base",
     };
@@ -295,7 +428,7 @@ function buildMultiImageChain(opts: {
   // Capped by the *shortest* segment (not a single shared segDur anymore) so no
   // transition overruns the segment it's attached to.
   const td = Math.min(cfg.transitionDur, Math.min(...segDurs) * 0.6);
-  const zoomRate = 0.004;
+  const zoomExpr = zoompanExpr(cfg.zoomDirection, cfg.zoomRate);
 
   const lines: string[] = [];
   for (let i = 0; i < n; i++) {
@@ -310,7 +443,7 @@ function buildMultiImageChain(opts: {
     } else {
       lines.push(
         `[${i}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
-          `zoompan=z='min(zoom+${zoomRate},1.3)':d=${frames}:s=1080x1920:fps=${fps}[img${i}]`,
+          `zoompan=z='${zoomExpr}':d=${frames}:s=1080x1920:fps=${fps}[img${i}]`,
       );
     }
   }
@@ -775,7 +908,7 @@ export async function renderKenBurnsVideo(opts: {
 
     if (endCardLogoInputIndex !== null) {
       filterLines.push(
-        `[${endCardLogoInputIndex}:v]scale=${END_CARD_LOGO_WIDTH}:-1,format=yuva420p,` +
+        `[${endCardLogoInputIndex}:v]scale=${END_CARD_LOGO_MAX_WIDTH}:${END_CARD_LOGO_MAX_HEIGHT}:force_original_aspect_ratio=decrease,format=yuva420p,` +
           `fade=t=in:st=${cardStart.toFixed(3)}:d=${cardFadeDur.toFixed(3)}:alpha=1,` +
           `fade=t=out:st=${cardFadeOutStart.toFixed(3)}:d=${cardFadeDur.toFixed(3)}:alpha=1[endcardlogo]`,
       );

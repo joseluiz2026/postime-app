@@ -95,7 +95,13 @@ export type StyleName =
   | "Cinematográfico"
   | "Neon Bold"
   | "Kinetic Text"
-  | "Split Screen";
+  | "Split Screen"
+  | "Zoom Out Cinético"
+  | "Deslize Vertical"
+  | "Revelação Circular"
+  | "Glitch Urbano"
+  | "Dissolver Sonhador"
+  | "Corte Diagonal";
 export type SceneSeconds = 1 | 2 | 3 | 4 | 5;
 export type MusicMoodSelection = MusicMood | "auto";
 export type CaptionColor = "auto" | "white" | "black" | "yellow" | "red" | "green" | "blue" | "purple";
@@ -190,9 +196,16 @@ async function inspectWatermarkPng(file: File): Promise<{ transparent: boolean; 
 // Render always scales the watermark to this fixed width (see lib/render/ken-burns.ts) —
 // anything narrower than this would be upscaled and look blurry in the final video.
 const WATERMARK_MIN_DIMENSION_PX = 180;
-// The end-card logo renders bigger (320px wide, see END_CARD_LOGO_WIDTH in
-// ken-burns.ts) than the small corner watermark, so it needs a higher floor.
-const END_CARD_LOGO_MIN_DIMENSION_PX = 320;
+// The end-card logo is fit into a 600x300 bounding box (see
+// END_CARD_LOGO_MAX_WIDTH/HEIGHT in ken-burns.ts) rather than rendered at a
+// fixed width — any shape (square, round, oval, rectangular) is fine as long
+// as it fits inside that box with a transparent background. Unlike the
+// corner watermark (always a small fixed width, so it needs a min *both*
+// dimensions floor), a wide-but-short banner logo is legitimate here, so the
+// floor only rejects a logo that's tiny on every side.
+const END_CARD_LOGO_MAX_WIDTH_PX = 600;
+const END_CARD_LOGO_MAX_HEIGHT_PX = 300;
+const END_CARD_LOGO_MIN_LONGEST_SIDE_PX = 120;
 
 type WizardState = {
   // account
@@ -889,9 +902,15 @@ export function WizardProvider({
           transparencyWarning =
             "Esse PNG não tem fundo transparente de verdade — ele vai aparecer com um fundo sólido no card final. Pra um resultado limpo, exporte a logo com fundo transparente (ex: remove.bg).";
         }
-        if (inspection.width < END_CARD_LOGO_MIN_DIMENSION_PX || inspection.height < END_CARD_LOGO_MIN_DIMENSION_PX) {
+        if (inspection.width > END_CARD_LOGO_MAX_WIDTH_PX || inspection.height > END_CARD_LOGO_MAX_HEIGHT_PX) {
           setEndCardLogoError(
-            `A imagem é muito pequena (${inspection.width}x${inspection.height}px). Envie pelo menos ${END_CARD_LOGO_MIN_DIMENSION_PX}x${END_CARD_LOGO_MIN_DIMENSION_PX}px.`,
+            `A imagem é muito grande (${inspection.width}x${inspection.height}px). O máximo é ${END_CARD_LOGO_MAX_WIDTH_PX}x${END_CARD_LOGO_MAX_HEIGHT_PX}px.`,
+          );
+          return;
+        }
+        if (inspection.width < END_CARD_LOGO_MIN_LONGEST_SIDE_PX && inspection.height < END_CARD_LOGO_MIN_LONGEST_SIDE_PX) {
+          setEndCardLogoError(
+            `A imagem é muito pequena (${inspection.width}x${inspection.height}px). Envie uma logo maior pra não ficar borrada.`,
           );
           return;
         }
