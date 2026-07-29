@@ -73,6 +73,20 @@ export function AccountCard() {
           <Icon name="crown" /> Assinar Pro e destravar tudo
         </button>
       )}
+      {/* Persistent (not dismissible) — reappears on every /app/* page via this
+          shared card until the user actually connects a key, by design. */}
+      {wizard.isSubscribed && !wizard.hasOwnKey && (
+        <Link
+          href="/app/provedores"
+          className="flex items-start gap-2 w-full mb-3 py-2.5 px-2.5 rounded-lg text-left no-underline bg-[color-mix(in_srgb,var(--teal)_12%,transparent)] border-[0.5px] border-[var(--teal)] transition-all hover:brightness-110"
+        >
+          <Icon name="key" className="text-[var(--teal)] text-sm shrink-0 mt-0.5" />
+          <span className="text-[11.5px] text-[var(--text-1)] leading-snug">
+            <strong className="block font-semibold mb-0.5">Configure sua própria API</strong>
+            Conecte sua chave pra aproveitar melhor o plano Pro — ela tem prioridade sempre que conectada.
+          </span>
+        </Link>
+      )}
       {wizard.userEmail && (
         <div className="text-[11px] text-[var(--text-3)] mb-3 truncate" title={wizard.userEmail}>
           {wizard.userEmail}

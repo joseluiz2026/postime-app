@@ -25,6 +25,13 @@ const MAX_OVERLAY_CUES = 12;
 // tested end-to-end before launch — flip this back to false once verified.
 const ALLOW_END_CARD_FOR_FREE_TESTING = true;
 const MAX_END_CARD_TEXT_LENGTH = 200;
+// Own-photo entry/exit scheduling (Estilo's "posicione fotos no tempo") is
+// meant to be Pro-only too, once it's been tested and approved. TEMPORARY:
+// also allow it on Free-plan accounts for that testing — flip this back to
+// false once verified. Independent from ALLOW_END_CARD_FOR_FREE_TESTING
+// above since the two features are being tested/approved on their own
+// timelines.
+const ALLOW_OWN_PHOTO_SCHEDULE_FOR_FREE_TESTING = true;
 
 /** Sanitizes a raw título/subtítulo cue array from the client: keeps only
  * well-formed {text, start, end} entries, trims/caps text length, clamps
@@ -221,8 +228,13 @@ export async function POST(request: Request) {
   // "posicione fotos no tempo" table for this one tema. Only meaningful (and
   // only ever sent) when building a single video — see confirmBuild's one-
   // at-a-time gate in wizard-context.tsx. Sanitized against the real
-  // `duration` further down, once it's known.
-  const ownImageCuesRaw: unknown[] = Array.isArray(body?.ownImageCues) ? body.ownImageCues : [];
+  // `duration` further down, once it's known. Pro-only (see
+  // ALLOW_OWN_PHOTO_SCHEDULE_FOR_FREE_TESTING above) — a Free/trial account
+  // sending cues just gets ignored and falls back to the normal per-scene/
+  // auto behavior, same graceful-degradation as the watermark/end-card.
+  const ownPhotoScheduleEligible = hasActiveSubscription || ALLOW_OWN_PHOTO_SCHEDULE_FOR_FREE_TESTING;
+  const ownImageCuesRaw: unknown[] =
+    ownPhotoScheduleEligible && Array.isArray(body?.ownImageCues) ? body.ownImageCues : [];
   // Parallel to ownImageUrls — "video" means that slot's URL is a real uploaded
   // clip (see app/app/estilo's per-scene picker), not a still photo.
   const ownMediaTypes: ("image" | "video")[] = Array.isArray(body?.ownMediaTypes)
