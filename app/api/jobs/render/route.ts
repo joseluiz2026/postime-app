@@ -487,6 +487,16 @@ export async function DELETE(request: Request) {
   }
 
   await supabase.storage.from("postime-videos").remove([videoPath]);
+  // The GET history handler above only filters on the jobs row (status
+  // "pronto" + video_url set) — it never checks whether the file still
+  // exists in storage. Without this, removing just the file left the row
+  // behind, so the deleted video kept reappearing in "vídeos prontos" on
+  // every refresh even though playing it would 404.
+  await supabase
+    .from("jobs")
+    .update({ status: "expirado", video_url: null })
+    .eq("user_id", user.id)
+    .eq("video_url", videoPath);
   return NextResponse.json({ ok: true });
 }
 
