@@ -25,13 +25,6 @@ const MAX_OVERLAY_CUES = 12;
 // tested end-to-end before launch — flip this back to false once verified.
 const ALLOW_END_CARD_FOR_FREE_TESTING = true;
 const MAX_END_CARD_TEXT_LENGTH = 200;
-// Own-photo entry/exit scheduling (Estilo's "posicione fotos no tempo") is
-// meant to be Pro-only too, once it's been tested and approved. TEMPORARY:
-// also allow it on Free-plan accounts for that testing — flip this back to
-// false once verified. Independent from ALLOW_END_CARD_FOR_FREE_TESTING
-// above since the two features are being tested/approved on their own
-// timelines.
-const ALLOW_OWN_PHOTO_SCHEDULE_FOR_FREE_TESTING = true;
 
 /** Sanitizes a raw título/subtítulo cue array from the client: keeps only
  * well-formed {text, start, end} entries, trims/caps text length, clamps
@@ -51,73 +44,6 @@ function parseOverlayCues(raw: unknown): { text: string; start: number; end: num
     })
     .filter((v): v is { text: string; start: number; end: number } => v !== null)
     .slice(0, MAX_OVERLAY_CUES);
-}
-
-type OwnImageCue = { url: string; start: number; end: number };
-
-/** Sanitizes a raw ownImageCues array from the client: keeps only well-formed
- * {url,start,end} entries, clamps start/end into [0, duration], drops
- * anything shorter than half a second, then sorts by start and resolves
- * overlaps — only one photo can be on screen at a time, so a later cue that
- * starts before an earlier one ends gets pushed forward to start right where
- * the earlier one's block ends (first-scheduled wins the disputed span). */
-function resolveOwnImageCues(raw: unknown[], duration: number): OwnImageCue[] {
-  const sanitized = raw
-    .map((v) => {
-      if (!v || typeof v !== "object") return null;
-      const url = typeof (v as Record<string, unknown>).url === "string" ? (v as { url: string }).url : "";
-      const startRaw = (v as Record<string, unknown>).start;
-      const endRaw = (v as Record<string, unknown>).end;
-      const start =
-        typeof startRaw === "number" && Number.isFinite(startRaw) ? Math.max(0, Math.min(startRaw, duration)) : null;
-      const end =
-        typeof endRaw === "number" && Number.isFinite(endRaw) ? Math.max(0, Math.min(endRaw, duration)) : null;
-      if (!url || !/^https:\/\//.test(url) || start === null || end === null || end - start < 0.5) return null;
-      return { url, start, end };
-    })
-    .filter((v): v is OwnImageCue => v !== null)
-    .sort((a, b) => a.start - b.start);
-
-  const resolved: OwnImageCue[] = [];
-  let cursor = 0;
-  for (const cue of sanitized) {
-    const start = Math.max(cue.start, cursor);
-    if (cue.end - start < 0.5) continue;
-    resolved.push({ url: cue.url, start, end: cue.end });
-    cursor = cue.end;
-  }
-  return resolved;
-}
-
-/** Builds an ordered list of segments covering [0, duration]: each scheduled
- * own-photo cue becomes one segment at its exact time, and every gap before,
- * between, or after cues is subdivided into ~sceneSeconds-long auto segments
- * to be filled with stock photos — same spirit as the regular per-scene
- * split (computeSegmentCount), just applied to a gap instead of the whole
- * video, so it doesn't need that helper's whole-video padding fudge. */
-function buildScheduledSegmentPlan(
-  duration: number,
-  cues: OwnImageCue[],
-  sceneSeconds: number,
-): { start: number; end: number; ownUrl: string | null }[] {
-  const plan: { start: number; end: number; ownUrl: string | null }[] = [];
-  const pushGap = (from: number, to: number) => {
-    const span = to - from;
-    if (span < 0.5) return;
-    const count = Math.max(1, Math.round(span / sceneSeconds));
-    const each = span / count;
-    for (let i = 0; i < count; i++) {
-      plan.push({ start: from + i * each, end: from + (i + 1) * each, ownUrl: null });
-    }
-  };
-  let cursor = 0;
-  for (const cue of cues) {
-    pushGap(cursor, cue.start);
-    plan.push({ start: cue.start, end: cue.end, ownUrl: cue.url });
-    cursor = cue.end;
-  }
-  pushGap(cursor, duration);
-  return plan;
 }
 
 export const runtime = "nodejs";
@@ -223,18 +149,6 @@ export async function POST(request: Request) {
   const ownImageUrls: (string | null)[] = Array.isArray(body?.ownImageUrls)
     ? body.ownImageUrls.map((v: unknown) => (typeof v === "string" && /^https:\/\//.test(v) ? v : null))
     : [];
-  // Alternative to the per-scene ownImageUrls picker above: explicit entry/exit
-  // times (seconds) for own photos, resolved client-side from the Estilo
-  // "posicione fotos no tempo" table for this one tema. Only meaningful (and
-  // only ever sent) when building a single video — see confirmBuild's one-
-  // at-a-time gate in wizard-context.tsx. Sanitized against the real
-  // `duration` further down, once it's known. Pro-only (see
-  // ALLOW_OWN_PHOTO_SCHEDULE_FOR_FREE_TESTING above) — a Free/trial account
-  // sending cues just gets ignored and falls back to the normal per-scene/
-  // auto behavior, same graceful-degradation as the watermark/end-card.
-  const ownPhotoScheduleEligible = hasActiveSubscription || ALLOW_OWN_PHOTO_SCHEDULE_FOR_FREE_TESTING;
-  const ownImageCuesRaw: unknown[] =
-    ownPhotoScheduleEligible && Array.isArray(body?.ownImageCues) ? body.ownImageCues : [];
   // Parallel to ownImageUrls — "video" means that slot's URL is a real uploaded
   // clip (see app/app/estilo's per-scene picker), not a still photo.
   const ownMediaTypes: ("image" | "video")[] = Array.isArray(body?.ownMediaTypes)
@@ -290,47 +204,24 @@ export async function POST(request: Request) {
     } else {
       duration = estimateReadingDurationSeconds(captionText!);
     }
-    const ownImageCues = resolveOwnImageCues(ownImageCuesRaw, duration);
-    const hasOwnImageCues = ownImageCues.length > 0;
-
-    let imageUrls: (string | null)[];
-    let mediaTypes: ("image" | "video")[];
-    // Only set when the scheduled-photo path below builds a plan with
-    // unequal segment lengths; the regular per-scene path leaves this
-    // undefined so renderKenBurnsVideo falls back to its own equal split.
-    let segmentDurations: number[] | undefined;
-
-    if (hasOwnImageCues) {
-      // Alternative to the per-scene picker below: the user positioned own
-      // photos at explicit times (Estilo's "posicione fotos no tempo" table)
-      // for this one video. Build an ordered plan covering the whole
-      // duration — cues at their exact times, gaps filled with
-      // ~sceneSeconds auto segments — instead of computeSegmentCount's flat
-      // equal split.
-      const plan = buildScheduledSegmentPlan(duration, ownImageCues, sceneSeconds);
-      imageUrls = plan.map((s) => s.ownUrl);
-      mediaTypes = new Array(plan.length).fill("image");
-      segmentDurations = plan.map((s) => s.end - s.start);
-      // Same "opening frame matches the UI thumbnail" treatment as the cover
-      // override below, for whichever slot actually opens the video.
-      if (imageUrls[0] === null) imageUrls[0] = imageUrl;
-    } else {
-      const numSegments = computeSegmentCount(duration, sceneSeconds);
-      // Segment 0 is the already-fetched cover image (keeps the video's opening frame
-      // consistent with the thumbnail shown in the UI) unless the user explicitly
-      // assigned their own photo to that slot. Any other segment uses the user's
-      // assigned photo when present (skipping the stock search entirely — this is what
-      // makes "só minhas fotos" possible with zero stock-provider calls); segments left
-      // unassigned fall back to one auto-fetched stock photo per text chunk, same as before.
-      imageUrls = new Array(numSegments).fill(null);
-      mediaTypes = new Array(numSegments).fill("image");
-      imageUrls[0] = ownImageUrls[0] || imageUrl;
-      mediaTypes[0] = ownImageUrls[0] ? (ownMediaTypes[0] ?? "image") : "image";
-      for (let k = 1; k < numSegments; k++) {
-        if (ownImageUrls[k]) {
-          imageUrls[k] = ownImageUrls[k];
-          mediaTypes[k] = ownMediaTypes[k] ?? "image";
-        }
+    const numSegments = computeSegmentCount(duration, sceneSeconds);
+    // Segment 0 is the already-fetched cover image (keeps the video's opening frame
+    // consistent with the thumbnail shown in the UI) unless the user explicitly
+    // assigned their own photo to that slot. Any other segment uses the user's
+    // assigned photo when present (skipping the stock search entirely — this is what
+    // makes "só minhas fotos" possible with zero stock-provider calls); segments left
+    // unassigned fall back to one auto-fetched stock photo per text chunk, same as before.
+    // Own photos land in these slots in whatever order the client sent them in
+    // ownImageUrls — see wizard-context.tsx's assignOwnImagesInOrder, which fills
+    // that array by natural-sorting the user's uploaded filenames.
+    const imageUrls: (string | null)[] = new Array(numSegments).fill(null);
+    const mediaTypes: ("image" | "video")[] = new Array(numSegments).fill("image");
+    imageUrls[0] = ownImageUrls[0] || imageUrl;
+    mediaTypes[0] = ownImageUrls[0] ? (ownMediaTypes[0] ?? "image") : "image";
+    for (let k = 1; k < numSegments; k++) {
+      if (ownImageUrls[k]) {
+        imageUrls[k] = ownImageUrls[k];
+        mediaTypes[k] = ownMediaTypes[k] ?? "image";
       }
     }
 
@@ -402,7 +293,6 @@ export async function POST(request: Request) {
     const durationSeconds = await renderKenBurnsVideo({
       imagePaths: imageFiles,
       mediaTypes,
-      segmentDurations,
       audioPath: audioFile,
       outputPath: outputFile,
       durationSeconds: duration,

@@ -52,9 +52,6 @@ function TemaPhotoPanel({ temaIndex }: { temaIndex: number }) {
   const texts = wizard.segmentTextsForTema(temaIndex);
   const assignments = wizard.imageAssignmentsByTema[temaIndex] ?? [];
   const assignedCount = Array.from({ length: needed }, (_, k) => assignments[k]).filter(Boolean).length;
-  const schedule = wizard.ownImageSchedulesByTema[temaIndex] ?? {};
-  const maxSeconds = parseInt(wizard.duration, 10) || 30;
-  const hasSchedule = wizard.temaHasOwnImageSchedule(temaIndex);
 
   let statusLabel: string;
   let statusClass: string;
@@ -129,104 +126,18 @@ function TemaPhotoPanel({ temaIndex }: { temaIndex: number }) {
             </div>
           ))}
           {wizard.ownImages.length > 0 && (
-            <div className="mt-3 pt-3 border-t-[0.5px] border-[var(--line)]">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-[12px] font-medium text-[var(--text-2)]">
-                  Ou posicione fotos no tempo (opcional)
-                </span>
-                <HelpTip
-                  label="Como funciona o posicionamento no tempo"
-                  text={`Alternativa ao "Automático" por cena acima: marque de qual até qual segundo cada foto aparece nesse vídeo (máximo ${maxSeconds}s, o tempo escolhido no início). O tempo que sobrar sem foto marcada é preenchido com banco de imagens automaticamente. Como o posicionamento é específico de cada vídeo, gerar fica limitado a um vídeo por vez enquanto isso estiver em uso.`}
-                />
-              </div>
-              {hasSchedule && (
-                <p className="text-[11px] text-[var(--gold)] mb-2 flex items-center gap-1">
-                  <Icon name="alert-triangle" /> Selecione só este vídeo pra gerar enquanto usar posicionamento no
-                  tempo.
-                </p>
-              )}
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr>
-                      <th className="text-left text-[10.5px] font-medium text-[var(--text-3)] pb-1.5">Foto</th>
-                      <th className="text-left text-[10.5px] font-medium text-[var(--text-3)] pb-1.5">Entrada</th>
-                      <th className="text-left text-[10.5px] font-medium text-[var(--text-3)] pb-1.5">Saída</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {wizard.ownImages.map((img) => {
-                      const s = schedule[img.path] ?? { start: null, end: null };
-                      return (
-                        <tr key={img.path} className="border-t-[0.5px] border-[var(--line)]">
-                          <td className="py-1.5 pr-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={img.url} alt="" className="w-8 h-8 object-cover rounded-md shrink-0" />
-                              <span
-                                className="text-[11.5px] text-[var(--text-2)] font-mono overflow-hidden text-ellipsis whitespace-nowrap max-w-[120px]"
-                                title={img.name}
-                              >
-                                {img.name}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="py-1.5 pr-3">
-                            <div className="flex items-center gap-1 shrink-0">
-                              <input
-                                type="number"
-                                min={0}
-                                max={maxSeconds}
-                                step={0.5}
-                                value={s.start ?? ""}
-                                placeholder="—"
-                                onChange={(e) => {
-                                  const raw = e.target.value;
-                                  if (raw === "") {
-                                    wizard.setOwnImageSchedule(temaIndex, img.path, { start: null });
-                                    return;
-                                  }
-                                  const start = Math.min(maxSeconds, Math.max(0, Number(raw) || 0));
-                                  wizard.setOwnImageSchedule(temaIndex, img.path, {
-                                    start,
-                                    end: s.end !== null && s.end < start + 0.5 ? Math.min(maxSeconds, start + 0.5) : s.end,
-                                  });
-                                }}
-                                className="w-14 bg-[var(--bg-1)] border-[0.5px] border-[var(--line)] rounded-[7px] text-[11px] text-[var(--text-1)] px-1.5 py-1 outline-none hover:border-[var(--line-strong)] focus:border-[var(--gold)]"
-                              />
-                              <span className="text-[10px] text-[var(--text-3)]">s</span>
-                            </div>
-                          </td>
-                          <td className="py-1.5">
-                            <div className="flex items-center gap-1 shrink-0">
-                              <input
-                                type="number"
-                                min={(s.start ?? 0) + 0.5}
-                                max={maxSeconds}
-                                step={0.5}
-                                value={s.end ?? ""}
-                                placeholder="—"
-                                onChange={(e) => {
-                                  const raw = e.target.value;
-                                  if (raw === "") {
-                                    wizard.setOwnImageSchedule(temaIndex, img.path, { end: null });
-                                    return;
-                                  }
-                                  const min = (s.start ?? 0) + 0.5;
-                                  const end = Math.min(maxSeconds, Math.max(min, Number(raw) || min));
-                                  wizard.setOwnImageSchedule(temaIndex, img.path, { end });
-                                }}
-                                className="w-14 bg-[var(--bg-1)] border-[0.5px] border-[var(--line)] rounded-[7px] text-[11px] text-[var(--text-1)] px-1.5 py-1 outline-none hover:border-[var(--line-strong)] focus:border-[var(--gold)]"
-                              />
-                              <span className="text-[10px] text-[var(--text-3)]">s</span>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+            <div className="mt-3 pt-3 border-t-[0.5px] border-[var(--line)] flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => wizard.assignOwnImagesInOrder(temaIndex)}
+                className="text-[12px] font-medium px-3 py-1.5 rounded-lg border-[0.5px] border-[var(--line-strong)] text-[var(--text-1)] bg-transparent cursor-pointer hover:border-[var(--gold)] hover:text-[var(--gold)]"
+              >
+                <Icon name="repeat" /> Usar minhas fotos em ordem
+              </button>
+              <HelpTip
+                label="Como funciona"
+                text="Preenche todas as cenas deste vídeo com suas fotos, uma por cena, na ordem numérica/alfabética do nome do arquivo (ex.: foto_01, foto_02...). Se tiver menos fotos que cenas, o resto continua automático com banco de imagens."
+              />
             </div>
           )}
         </div>
@@ -970,14 +881,19 @@ export default function EstiloPage() {
             text={
               <>
                 Envie suas fotos aqui e depois abra <strong>&quot;Fotos por vídeo&quot;</strong> logo abaixo pra
-                escolher, vídeo por vídeo, em qual cena cada uma entra. Sem foto atribuída, o vídeo inteiro usa fotos
-                dos bancos gratuitos automaticamente.
+                escolher, vídeo por vídeo, em qual cena cada uma entra — ou use o botão{" "}
+                <strong>&quot;Usar minhas fotos em ordem&quot;</strong> pra preencher tudo de uma vez, na ordem do nome
+                do arquivo. Sem foto atribuída, o vídeo inteiro usa fotos dos bancos gratuitos automaticamente.
               </>
             }
           />
         </FieldLabel>
-        <p className="text-[13px] text-[var(--text-2)] mb-4 leading-relaxed">
+        <p className="text-[13px] text-[var(--text-2)] mb-1 leading-relaxed">
           Suas próprias fotos, de lugares, pessoas ou produtos citados no roteiro.
+        </p>
+        <p className="text-[12px] text-[var(--text-3)] mb-4 leading-relaxed">
+          Dica: renomeie os arquivos com números antes de enviar (ex.: <code>minha_foto_001.jpg</code>,{" "}
+          <code>minha_foto_002.jpg</code>) pra controlar a ordem em que elas aparecem no vídeo.
         </p>
         <Dropzone
           icon="photo"

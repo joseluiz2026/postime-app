@@ -111,10 +111,6 @@ export type TextAlign = "left" | "center" | "right";
 export type TextOverlayCue = { id: string; text: string; start: number; end: number };
 
 export type OwnImage = { name: string; url: string; path: string };
-// Entry/exit schedule (seconds from the top of *one specific video*) for one
-// own photo — null means "not scheduled". Per-tema, not per-photo, since the
-// same uploaded photo pool can be positioned differently in each video.
-export type OwnImageSchedule = { start: number | null; end: number | null };
 export type Roteiro = {
   meta: string;
   text: string;
@@ -252,9 +248,6 @@ type WizardState = {
   // One entry per image segment of that tema's video; a URL means "use this own
   // photo in this slot", null means "fill this slot automatically with stock".
   imageAssignmentsByTema: (string | null)[][];
-  // Optional entry/exit time (seconds) per own photo, per tema — same shared
-  // photo pool (ownImages) can be positioned differently in each video.
-  ownImageSchedulesByTema: Record<string, OwnImageSchedule>[];
   // Optional, timed headline/support text cues per tema — an empty array means
   // "no overlays for this video". Content and timing are per-tema (each video's
   // topic/pacing differs); the look (align/font/size/color/shadow) is one
@@ -323,8 +316,6 @@ type WizardContextValue = WizardState & {
   setWebsearch: (v: string) => void;
   addOwnImages: (files: FileList) => Promise<void>;
   removeOwnImage: (idx: number) => void;
-  setOwnImageSchedule: (temaIdx: number, path: string, patch: { start?: number | null; end?: number | null }) => void;
-  temaHasOwnImageSchedule: (temaIdx: number) => boolean;
   loadVideoClips: () => Promise<void>;
   uploadVideoClip: (file: File) => Promise<boolean>;
   removeVideoClip: (id: string) => Promise<void>;
@@ -334,6 +325,7 @@ type WizardContextValue = WizardState & {
   neededSegmentsForTema: (idx: number) => number;
   segmentTextsForTema: (idx: number) => string[];
   setImageAssignment: (temaIdx: number, segmentIdx: number, url: string | null) => void;
+  assignOwnImagesInOrder: (temaIdx: number) => void;
   addTitleCue: (temaIdx: number) => void;
   updateTitleCue: (temaIdx: number, cueId: string, patch: Partial<Pick<TextOverlayCue, "text" | "start" | "end">>) => void;
   removeTitleCue: (temaIdx: number, cueId: string) => void;
@@ -469,7 +461,6 @@ export function WizardProvider({
   const [audioUploading, setAudioUploading] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [imageAssignmentsByTema, setImageAssignmentsByTema] = useState<(string | null)[][]>([]);
-  const [ownImageSchedulesByTema, setOwnImageSchedulesByTema] = useState<Record<string, OwnImageSchedule>[]>([]);
   const [titleCuesByTema, setTitleCuesByTema] = useState<TextOverlayCue[][]>([]);
   const [subtitleCuesByTema, setSubtitleCuesByTema] = useState<TextOverlayCue[][]>([]);
 
@@ -713,31 +704,21 @@ export function WizardProvider({
     });
   }, []);
 
-  const setOwnImageSchedule = useCallback(
-    (temaIdx: number, path: string, patch: { start?: number | null; end?: number | null }) => {
-      setOwnImageSchedulesByTema((prev) => {
-        const next = prev.map((m) => ({ ...m }));
-        while (next.length <= temaIdx) next.push({});
-        const current = next[temaIdx][path] ?? { start: null, end: null };
-        next[temaIdx] = { ...next[temaIdx], [path]: { ...current, ...patch } };
-        return next;
-      });
-    },
-    [],
-  );
-
-  /** True when at least one own photo has an entry or exit time set for this
-   * tema — used to enforce one-video-at-a-time building once photo timing is
-   * in use (each video needs its own photos positioned individually, so
-   * batching several at once no longer makes sense the way it does for
-   * shared style settings). */
-  const temaHasOwnImageSchedule = useCallback(
+  /** Fills every image segment of one tema with the user's own photos, one per
+   * slot, in natural-sort order of the original filename (so "foto_2.jpg" comes
+   * before "foto_10.jpg" — a plain string sort would get that backwards). This
+   * is the whole "own photo ordering" feature: no manual per-segment picking
+   * and no explicit entry/exit timestamps (the old "posicione fotos no tempo"
+   * table) — the user controls sequence just by naming files before upload.
+   * Slots beyond the photo pool's length are left as whatever they already
+   * were (typically untouched → automatic stock fallback). */
+  const assignOwnImagesInOrder = useCallback(
     (temaIdx: number) => {
-      const map = ownImageSchedulesByTema[temaIdx];
-      if (!map) return false;
-      return Object.values(map).some((s) => s.start !== null || s.end !== null);
+      const needed = neededSegmentsForTema(temaIdx);
+      const sorted = [...ownImages].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      sorted.slice(0, needed).forEach((img, k) => setImageAssignment(temaIdx, k, img.url));
     },
-    [ownImageSchedulesByTema],
+    [ownImages, neededSegmentsForTema, setImageAssignment],
   );
 
   const loadVideoClips = useCallback(async (): Promise<void> => {
@@ -991,7 +972,6 @@ export function WizardProvider({
     setMusicMoodByTema(new Array(n).fill("auto"));
     setImageThemeByTema(new Array(n).fill("auto"));
     setImageAssignmentsByTema(Array.from({ length: n }, () => []));
-    setOwnImageSchedulesByTema(Array.from({ length: n }, () => ({})));
     setTitleCuesByTema(Array.from({ length: n }, () => []));
     setSubtitleCuesByTema(Array.from({ length: n }, () => []));
   }, []);
@@ -1317,21 +1297,6 @@ export function WizardProvider({
   }> => {
     if (selectedForVideo.length === 0) return { ok: false, failedIndices: [], dailyLimitHit: false };
     const indices = [...selectedForVideo].sort((a, b) => a - b);
-    // Photo timing is per-video (each video needs its own photos positioned
-    // individually), so once any selected tema has a schedule set, batching
-    // several videos into one build no longer makes sense — force the user
-    // down to one at a time instead of silently reusing one tema's timing
-    // for photos it was never meant to apply to.
-    const scheduledIndices = indices.filter((i) => {
-      const map = ownImageSchedulesByTema[i];
-      return map && Object.values(map).some((s) => s.start !== null || s.end !== null);
-    });
-    if (indices.length > 1 && scheduledIndices.length > 0) {
-      setBuildError(
-        "Você posicionou fotos no tempo em pelo menos um dos vídeos selecionados. Como esse posicionamento é por vídeo, selecione só um vídeo por vez pra gerar.",
-      );
-      return { ok: false, failedIndices: [], dailyLimitHit: false };
-    }
     setBuildingVideos(true);
     setBuildError(null);
     try {
@@ -1410,17 +1375,6 @@ export function WizardProvider({
                 ownMediaTypes: (imageAssignmentsByTema[i] ?? []).map((url) =>
                   url && ownVideoClipUrls.has(url) ? "video" : "image",
                 ),
-                // Alternative to the per-scene picker above: photos positioned at
-                // explicit times for this tema (Estilo's "posicione fotos no
-                // tempo" table) — resolved here from path to signed URL since
-                // that's all the render route needs.
-                ownImageCues: Object.entries(ownImageSchedulesByTema[i] ?? {})
-                  .filter(([, s]) => s.start !== null && s.end !== null)
-                  .map(([imgPath, s]) => {
-                    const own = ownImages.find((img) => img.path === imgPath);
-                    return own ? { url: own.url, start: s.start as number, end: s.end as number } : null;
-                  })
-                  .filter((c): c is { url: string; start: number; end: number } => c !== null),
                 text: roteiros[i]?.text ?? "",
                 style: selectedStyle,
                 mood: (musicMoodByTema[i] ?? "auto") === "auto" ? roteiros[i]?.mood : musicMoodByTema[i],
@@ -1570,7 +1524,6 @@ export function WizardProvider({
     roteiros,
     audioPaths,
     imageAssignmentsByTema,
-    ownImageSchedulesByTema,
     ownImages,
     ownVideoClips,
     watermark,
@@ -1644,7 +1597,6 @@ export function WizardProvider({
       audioUploading,
       audioError,
       imageAssignmentsByTema,
-      ownImageSchedulesByTema,
       titleCuesByTema,
       subtitleCuesByTema,
       selectedStyle,
@@ -1696,8 +1648,6 @@ export function WizardProvider({
       setWebsearch,
       addOwnImages,
       removeOwnImage,
-      setOwnImageSchedule,
-      temaHasOwnImageSchedule,
       loadVideoClips,
       uploadVideoClip,
       removeVideoClip,
@@ -1707,6 +1657,7 @@ export function WizardProvider({
       neededSegmentsForTema,
       segmentTextsForTema,
       setImageAssignment,
+      assignOwnImagesInOrder,
       addTitleCue,
       updateTitleCue,
       removeTitleCue,
@@ -1805,7 +1756,6 @@ export function WizardProvider({
       audioUploading,
       audioError,
       imageAssignmentsByTema,
-      ownImageSchedulesByTema,
       titleCuesByTema,
       subtitleCuesByTema,
       selectedStyle,
@@ -1851,8 +1801,6 @@ export function WizardProvider({
       signOut,
       addOwnImages,
       removeOwnImage,
-      setOwnImageSchedule,
-      temaHasOwnImageSchedule,
       loadVideoClips,
       uploadVideoClip,
       removeVideoClip,
@@ -1862,6 +1810,7 @@ export function WizardProvider({
       neededSegmentsForTema,
       segmentTextsForTema,
       setImageAssignment,
+      assignOwnImagesInOrder,
       addTitleCue,
       updateTitleCue,
       removeTitleCue,
