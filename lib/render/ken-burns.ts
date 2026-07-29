@@ -252,18 +252,22 @@ function getCaptionFontPath(font?: string): string {
  * real motion. Everything downstream (xfade concat, captions, etc.) treats both
  * kinds identically once they're labeled video streams. */
 function buildMultiImageChain(opts: {
-  imageCount: number;
+  // Per-segment "solo" duration in seconds — segments need not be equal
+  // length (the scheduled-own-photo render path builds a plan with
+  // variable-length segments; the plain segment-per-scene path just passes
+  // an array of `duration/n` repeated n times).
+  segDurs: number[];
   mediaTypes: ("image" | "video")[];
-  duration: number;
   outroSeconds: number;
   fps: number;
   cfg: StyleRenderConfig;
 }): { lines: string[]; outLabel: string } {
-  const { imageCount: n, mediaTypes, duration, outroSeconds, fps, cfg } = opts;
+  const { segDurs, mediaTypes, outroSeconds, fps, cfg } = opts;
+  const n = segDurs.length;
   const typeAt = (i: number): "image" | "video" => mediaTypes[i] ?? "image";
 
   if (n <= 1) {
-    const seconds = duration + outroSeconds;
+    const seconds = (segDurs[0] ?? 0) + outroSeconds;
     if (typeAt(0) === "video") {
       return {
         lines: [
@@ -288,16 +292,16 @@ function buildMultiImageChain(opts: {
   // combined timeline ends up a hair longer than `duration`, trimmed off by -t later.
   // The last clip additionally gets `outroSeconds` of extra frames so the picture
   // keeps moving during the music-only tail instead of running out of video.
-  const segDur = duration / n;
-  const td = Math.min(cfg.transitionDur, segDur * 0.6);
-  const clipDur = segDur + td;
-  const frames = Math.max(1, Math.round(clipDur * fps));
-  const lastFrames = Math.max(1, Math.round((clipDur + outroSeconds) * fps));
+  // Capped by the *shortest* segment (not a single shared segDur anymore) so no
+  // transition overruns the segment it's attached to.
+  const td = Math.min(cfg.transitionDur, Math.min(...segDurs) * 0.6);
   const zoomRate = 0.004;
 
   const lines: string[] = [];
   for (let i = 0; i < n; i++) {
+    const clipDur = segDurs[i] + td;
     const thisClipDur = i === n - 1 ? clipDur + outroSeconds : clipDur;
+    const frames = Math.max(1, Math.round(thisClipDur * fps));
     if (typeAt(i) === "video") {
       lines.push(
         `[${i}:v]trim=0:${thisClipDur.toFixed(3)},setpts=PTS-STARTPTS,` +
@@ -306,17 +310,18 @@ function buildMultiImageChain(opts: {
     } else {
       lines.push(
         `[${i}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,` +
-          `zoompan=z='min(zoom+${zoomRate},1.3)':d=${i === n - 1 ? lastFrames : frames}:s=1080x1920:fps=${fps}[img${i}]`,
+          `zoompan=z='min(zoom+${zoomRate},1.3)':d=${frames}:s=1080x1920:fps=${fps}[img${i}]`,
       );
     }
   }
 
   let cur = "img0";
+  let cumulative = 0;
   for (let i = 1; i < n; i++) {
-    const offset = (i * segDur).toFixed(3);
+    cumulative += segDurs[i - 1];
     const out = i === n - 1 ? "base" : `x${i}`;
     lines.push(
-      `[${cur}][img${i}]xfade=transition=${cfg.transition}:duration=${td.toFixed(3)}:offset=${offset}[${out}]`,
+      `[${cur}][img${i}]xfade=transition=${cfg.transition}:duration=${td.toFixed(3)}:offset=${cumulative.toFixed(3)}[${out}]`,
     );
     cur = out;
   }
@@ -532,6 +537,13 @@ export async function renderKenBurnsVideo(opts: {
   // fit its segment, looped if shorter than needed) instead of a still zoompan'd.
   // Omitted/shorter than imagePaths defaults every unlisted entry to "image".
   mediaTypes?: ("image" | "video")[];
+  // Parallel to imagePaths — explicit "solo" duration (seconds) for each
+  // segment, for callers building a plan with unequal segment lengths (own
+  // photos scheduled at specific times, gaps filled with shorter auto
+  // segments). Must match imagePaths.length or it's ignored; omitted (the
+  // common case) divides `duration` evenly across all segments, same as
+  // before this option existed.
+  segmentDurations?: number[];
   audioPath?: string;
   outputPath: string;
   captionText?: string;
@@ -596,10 +608,14 @@ export async function renderKenBurnsVideo(opts: {
   const workDir = path.dirname(opts.outputPath);
   const cfg = STYLE_CONFIGS[opts.style ?? DEFAULT_STYLE] ?? STYLE_CONFIGS[DEFAULT_STYLE];
 
+  const segDurs =
+    opts.segmentDurations && opts.segmentDurations.length === opts.imagePaths.length
+      ? opts.segmentDurations
+      : Array.from({ length: opts.imagePaths.length }, () => duration / opts.imagePaths.length);
+
   const { lines: imageLines, outLabel: imagesOutLabel } = buildMultiImageChain({
-    imageCount: opts.imagePaths.length,
+    segDurs,
     mediaTypes: opts.mediaTypes ?? [],
-    duration,
     outroSeconds: chainTailSeconds,
     fps,
     cfg,

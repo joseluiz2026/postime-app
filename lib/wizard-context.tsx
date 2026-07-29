@@ -1405,6 +1405,17 @@ export function WizardProvider({
                 ownMediaTypes: (imageAssignmentsByTema[i] ?? []).map((url) =>
                   url && ownVideoClipUrls.has(url) ? "video" : "image",
                 ),
+                // Alternative to the per-scene picker above: photos positioned at
+                // explicit times for this tema (Estilo's "posicione fotos no
+                // tempo" table) — resolved here from path to signed URL since
+                // that's all the render route needs.
+                ownImageCues: Object.entries(ownImageSchedulesByTema[i] ?? {})
+                  .filter(([, s]) => s.start !== null && s.end !== null)
+                  .map(([imgPath, s]) => {
+                    const own = ownImages.find((img) => img.path === imgPath);
+                    return own ? { url: own.url, start: s.start as number, end: s.end as number } : null;
+                  })
+                  .filter((c): c is { url: string; start: number; end: number } => c !== null),
                 text: roteiros[i]?.text ?? "",
                 style: selectedStyle,
                 mood: (musicMoodByTema[i] ?? "auto") === "auto" ? roteiros[i]?.mood : musicMoodByTema[i],
@@ -1518,6 +1529,7 @@ export function WizardProvider({
     audioPaths,
     imageAssignmentsByTema,
     ownImageSchedulesByTema,
+    ownImages,
     ownVideoClips,
     watermark,
     watermarkPosition,
