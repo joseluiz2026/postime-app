@@ -110,11 +110,11 @@ export type TextAlign = "left" | "center" | "right";
  * single overlay this replaced. */
 export type TextOverlayCue = { id: string; text: string; start: number; end: number };
 
-// start/end (seconds from the top of the video) are an optional entry/exit
-// schedule for this photo, same units as title/subtitle cues — null means
-// "not scheduled", so the assignment stays purely the per-scene dropdown
-// pick (see TemaPhotoPanel) rather than this timeline.
-export type OwnImage = { name: string; url: string; path: string; start: number | null; end: number | null };
+export type OwnImage = { name: string; url: string; path: string };
+// Entry/exit schedule (seconds from the top of *one specific video*) for one
+// own photo — null means "not scheduled". Per-tema, not per-photo, since the
+// same uploaded photo pool can be positioned differently in each video.
+export type OwnImageSchedule = { start: number | null; end: number | null };
 export type Roteiro = {
   meta: string;
   text: string;
@@ -251,6 +251,9 @@ type WizardState = {
   // One entry per image segment of that tema's video; a URL means "use this own
   // photo in this slot", null means "fill this slot automatically with stock".
   imageAssignmentsByTema: (string | null)[][];
+  // Optional entry/exit time (seconds) per own photo, per tema — same shared
+  // photo pool (ownImages) can be positioned differently in each video.
+  ownImageSchedulesByTema: Record<string, OwnImageSchedule>[];
   // Optional, timed headline/support text cues per tema — an empty array means
   // "no overlays for this video". Content and timing are per-tema (each video's
   // topic/pacing differs); the look (align/font/size/color/shadow) is one
@@ -319,7 +322,8 @@ type WizardContextValue = WizardState & {
   setWebsearch: (v: string) => void;
   addOwnImages: (files: FileList) => Promise<void>;
   removeOwnImage: (idx: number) => void;
-  setOwnImageSchedule: (path: string, patch: { start?: number | null; end?: number | null }) => void;
+  setOwnImageSchedule: (temaIdx: number, path: string, patch: { start?: number | null; end?: number | null }) => void;
+  temaHasOwnImageSchedule: (temaIdx: number) => boolean;
   loadVideoClips: () => Promise<void>;
   uploadVideoClip: (file: File) => Promise<boolean>;
   removeVideoClip: (id: string) => Promise<void>;
@@ -464,6 +468,7 @@ export function WizardProvider({
   const [audioUploading, setAudioUploading] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [imageAssignmentsByTema, setImageAssignmentsByTema] = useState<(string | null)[][]>([]);
+  const [ownImageSchedulesByTema, setOwnImageSchedulesByTema] = useState<Record<string, OwnImageSchedule>[]>([]);
   const [titleCuesByTema, setTitleCuesByTema] = useState<TextOverlayCue[][]>([]);
   const [subtitleCuesByTema, setSubtitleCuesByTema] = useState<TextOverlayCue[][]>([]);
 
@@ -678,7 +683,7 @@ export function WizardProvider({
           const { data: signed } = await supabase.storage
             .from("postime-images")
             .createSignedUrl(path, 60 * 60 * 24);
-          if (signed?.signedUrl) next.push({ name: file.name, url: signed.signedUrl, path, start: null, end: null });
+          if (signed?.signedUrl) next.push({ name: file.name, url: signed.signedUrl, path });
         }
         if (next.length < imageFiles.length) {
           setOwnImagesError("Algumas imagens não puderam ser enviadas. Tente novamente.");
@@ -707,9 +712,32 @@ export function WizardProvider({
     });
   }, []);
 
-  const setOwnImageSchedule = useCallback((path: string, patch: { start?: number | null; end?: number | null }) => {
-    setOwnImages((prev) => prev.map((img) => (img.path === path ? { ...img, ...patch } : img)));
-  }, []);
+  const setOwnImageSchedule = useCallback(
+    (temaIdx: number, path: string, patch: { start?: number | null; end?: number | null }) => {
+      setOwnImageSchedulesByTema((prev) => {
+        const next = prev.map((m) => ({ ...m }));
+        while (next.length <= temaIdx) next.push({});
+        const current = next[temaIdx][path] ?? { start: null, end: null };
+        next[temaIdx] = { ...next[temaIdx], [path]: { ...current, ...patch } };
+        return next;
+      });
+    },
+    [],
+  );
+
+  /** True when at least one own photo has an entry or exit time set for this
+   * tema — used to enforce one-video-at-a-time building once photo timing is
+   * in use (each video needs its own photos positioned individually, so
+   * batching several at once no longer makes sense the way it does for
+   * shared style settings). */
+  const temaHasOwnImageSchedule = useCallback(
+    (temaIdx: number) => {
+      const map = ownImageSchedulesByTema[temaIdx];
+      if (!map) return false;
+      return Object.values(map).some((s) => s.start !== null || s.end !== null);
+    },
+    [ownImageSchedulesByTema],
+  );
 
   const loadVideoClips = useCallback(async (): Promise<void> => {
     try {
@@ -962,6 +990,7 @@ export function WizardProvider({
     setMusicMoodByTema(new Array(n).fill("auto"));
     setImageThemeByTema(new Array(n).fill("auto"));
     setImageAssignmentsByTema(Array.from({ length: n }, () => []));
+    setOwnImageSchedulesByTema(Array.from({ length: n }, () => ({})));
     setTitleCuesByTema(Array.from({ length: n }, () => []));
     setSubtitleCuesByTema(Array.from({ length: n }, () => []));
   }, []);
@@ -1287,6 +1316,21 @@ export function WizardProvider({
   }> => {
     if (selectedForVideo.length === 0) return { ok: false, failedIndices: [], dailyLimitHit: false };
     const indices = [...selectedForVideo].sort((a, b) => a - b);
+    // Photo timing is per-video (each video needs its own photos positioned
+    // individually), so once any selected tema has a schedule set, batching
+    // several videos into one build no longer makes sense — force the user
+    // down to one at a time instead of silently reusing one tema's timing
+    // for photos it was never meant to apply to.
+    const scheduledIndices = indices.filter((i) => {
+      const map = ownImageSchedulesByTema[i];
+      return map && Object.values(map).some((s) => s.start !== null || s.end !== null);
+    });
+    if (indices.length > 1 && scheduledIndices.length > 0) {
+      setBuildError(
+        "Você posicionou fotos no tempo em pelo menos um dos vídeos selecionados. Como esse posicionamento é por vídeo, selecione só um vídeo por vez pra gerar.",
+      );
+      return { ok: false, failedIndices: [], dailyLimitHit: false };
+    }
     setBuildingVideos(true);
     setBuildError(null);
     try {
@@ -1473,6 +1517,7 @@ export function WizardProvider({
     roteiros,
     audioPaths,
     imageAssignmentsByTema,
+    ownImageSchedulesByTema,
     ownVideoClips,
     watermark,
     watermarkPosition,
@@ -1545,6 +1590,7 @@ export function WizardProvider({
       audioUploading,
       audioError,
       imageAssignmentsByTema,
+      ownImageSchedulesByTema,
       titleCuesByTema,
       subtitleCuesByTema,
       selectedStyle,
@@ -1597,6 +1643,7 @@ export function WizardProvider({
       addOwnImages,
       removeOwnImage,
       setOwnImageSchedule,
+      temaHasOwnImageSchedule,
       loadVideoClips,
       uploadVideoClip,
       removeVideoClip,
@@ -1704,6 +1751,7 @@ export function WizardProvider({
       audioUploading,
       audioError,
       imageAssignmentsByTema,
+      ownImageSchedulesByTema,
       titleCuesByTema,
       subtitleCuesByTema,
       selectedStyle,
@@ -1750,6 +1798,7 @@ export function WizardProvider({
       addOwnImages,
       removeOwnImage,
       setOwnImageSchedule,
+      temaHasOwnImageSchedule,
       loadVideoClips,
       uploadVideoClip,
       removeVideoClip,
