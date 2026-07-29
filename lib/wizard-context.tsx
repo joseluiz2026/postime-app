@@ -297,6 +297,8 @@ type WizardState = {
   subtitleShadow: boolean;
   watermark: { url: string; path: string } | null;
   watermarkPosition: WatermarkPosition;
+  // 0-100, defaults to 100 (fully opaque).
+  watermarkOpacity: number;
   watermarkUploading: boolean;
   watermarkError: string | null;
   // End card: Pro-only logo + CTA shown on the final black frame (see
@@ -394,6 +396,7 @@ type WizardContextValue = WizardState & {
   uploadWatermark: (file: File) => Promise<void>;
   removeWatermark: () => void;
   setWatermarkPosition: (pos: WatermarkPosition) => void;
+  setWatermarkOpacity: (opacity: number) => void;
   setEndCardEnabled: (v: boolean) => void;
   setEndCardText: (v: string) => void;
   uploadEndCardLogo: (file: File) => Promise<void>;
@@ -501,6 +504,7 @@ export function WizardProvider({
   const [musicVolume, setMusicVolume] = useState<number | null>(null);
   const [watermark, setWatermark] = useState<{ url: string; path: string } | null>(null);
   const [watermarkPosition, setWatermarkPosition] = useState<WatermarkPosition>("bottom-right");
+  const [watermarkOpacity, setWatermarkOpacity] = useState<number>(100);
   const [watermarkUploading, setWatermarkUploading] = useState(false);
   const [watermarkError, setWatermarkError] = useState<string | null>(null);
   const [endCardEnabled, setEndCardEnabled] = useState(false);
@@ -1425,6 +1429,7 @@ export function WizardProvider({
                 subtitleShadow,
                 watermarkPath: watermark?.path,
                 watermarkPosition,
+                watermarkOpacity,
                 endCardEnabled,
                 endCardLogoPath: endCardLogo?.path,
                 endCardText,
@@ -1547,6 +1552,7 @@ export function WizardProvider({
     ownVideoClips,
     watermark,
     watermarkPosition,
+    watermarkOpacity,
     endCardEnabled,
     endCardLogo,
     endCardText,
@@ -1642,6 +1648,7 @@ export function WizardProvider({
       subtitleShadow,
       watermark,
       watermarkPosition,
+      watermarkOpacity,
       watermarkUploading,
       watermarkError,
       endCardEnabled,
@@ -1726,6 +1733,7 @@ export function WizardProvider({
       uploadWatermark,
       removeWatermark,
       setWatermarkPosition,
+      setWatermarkOpacity,
       setEndCardEnabled,
       setEndCardText,
       uploadEndCardLogo,
@@ -1801,6 +1809,7 @@ export function WizardProvider({
       subtitleShadow,
       watermark,
       watermarkPosition,
+      watermarkOpacity,
       watermarkUploading,
       watermarkError,
       endCardEnabled,
@@ -1859,6 +1868,7 @@ export function WizardProvider({
       uploadWatermark,
       removeWatermark,
       setWatermarkPosition,
+      setWatermarkOpacity,
       setEndCardEnabled,
       setEndCardText,
       uploadEndCardLogo,

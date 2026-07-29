@@ -1163,6 +1163,22 @@ export default function EstiloPage() {
                 </Pill>
               ))}
             </div>
+            <span className="block text-xs font-medium text-[var(--text-2)] mt-4 mb-2">Transparência</span>
+            <div className="flex items-center gap-3 max-w-[420px]">
+              <span className="text-[11px] text-[var(--text-3)] shrink-0">Sutil</span>
+              <input
+                type="range"
+                min={10}
+                max={100}
+                value={wizard.watermarkOpacity}
+                onChange={(e) => wizard.setWatermarkOpacity(Number(e.target.value))}
+                className="flex-1 accent-[var(--gold)]"
+              />
+              <span className="text-[11px] text-[var(--text-3)] shrink-0">Sólida</span>
+            </div>
+            <div className="mt-1.5">
+              <span className="text-[11px] text-[var(--text-3)]">{wizard.watermarkOpacity}%</span>
+            </div>
           </div>
         )}
       </div>

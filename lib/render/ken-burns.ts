@@ -708,6 +708,8 @@ export async function renderKenBurnsVideo(opts: {
   musicVolume?: number | null;
   watermarkPath?: string;
   watermarkPosition?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  // 0-100 absolute percentage; undefined defaults to fully opaque (100).
+  watermarkOpacity?: number;
   // End card: a logo + CTA shown after the outro fade, on the already-black
   // frame (see OUTRO_CARD_SECONDS). endCardEnabled is the on/off switch — the
   // logo/text below are only rendered when it's true; endCardText falls back
@@ -886,7 +888,11 @@ export async function renderKenBurnsVideo(opts: {
       "bottom-right": `x=main_w-overlay_w-${margin}:y=main_h-overlay_h-${margin}`,
     };
     const xy = watermarkXY[opts.watermarkPosition ?? "bottom-right"];
-    filterLines.push(`[${watermarkInputIndex}:v]scale=180:-1[wm]`);
+    // colorchannelmixer's aa= multiplies the existing alpha channel rather than
+    // replacing it, so the logo's own transparent background stays transparent
+    // — this only fades the opaque parts down, uniformly, by the chosen amount.
+    const wmAlpha = Math.min(100, Math.max(0, opts.watermarkOpacity ?? 100)) / 100;
+    filterLines.push(`[${watermarkInputIndex}:v]scale=180:-1,format=rgba,colorchannelmixer=aa=${wmAlpha}[wm]`);
     filterLines.push(`[${outLabel}][wm]overlay=${xy}[wmout]`);
     outLabel = "wmout";
   }

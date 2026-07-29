@@ -139,6 +139,10 @@ export async function POST(request: Request) {
   const watermarkPosition = ALLOWED_WATERMARK_POSITIONS.includes(body?.watermarkPosition)
     ? (body.watermarkPosition as string)
     : "bottom-right";
+  const watermarkOpacity =
+    typeof body?.watermarkOpacity === "number" && Number.isFinite(body.watermarkOpacity)
+      ? Math.min(100, Math.max(0, body.watermarkOpacity))
+      : 100;
   const endCardEnabledRequested = body?.endCardEnabled === true;
   const endCardLogoPath = typeof body?.endCardLogoPath === "string" ? body.endCardLogoPath : "";
   const endCardText =
@@ -319,6 +323,7 @@ export async function POST(request: Request) {
       subtitleShadow,
       watermarkPath: watermarkFile,
       watermarkPosition: watermarkFile ? (watermarkPosition as "top-left" | "top-right" | "bottom-left" | "bottom-right") : undefined,
+      watermarkOpacity,
       captionFont,
       musicPath: musicPath ?? undefined,
       endCardEnabled: showEndCard,
